@@ -22,32 +22,32 @@ Introduction
 ## Motivation
 
 Distributed databases are very popular when it comes to service scalability and high availability.
-Such databases, like Apache Cassandra [@lakshman_malik_2009], MongoDB [@mongodb] or Redis [@redis] are able to handle node or network failures, but cannot handle nodes acting as Byzantine, as introduced by [@lamport_shostak_pease_1982].
+Such databases, like Apache Cassandra [@lakshman_malik_2009], MongoDB [@mongodb] or Redis [@redis] are able to handle node or network failures, but cannot handle nodes acting in a byzantine way, as introduced by [@lamport_shostak_pease_1982].
 
 Solving the Byzantine problem usually involves complex, costly or non-scalable consensus algorithms.
 We can mention the well-known PBFT [@castro_liskov_2002], the Bitcoin Proof-of-Work [@bitcoin], the Tendermint protocol [@tendermint] or the Stellar CP [@scp] among many others.
 Generally, these protocols require some strong coordination between nodes (leadership for example), or are mostly designed for a specific application (crypto-currencies for example).
 This strong coordination reduces scalability and performance of the global system.
 
-We introduce SporeDB as a way to solve these problems using the simple (but powerful) techniques.
+We introduce SporeDB as a way to solve these problems using simple (but powerful) techniques.
 
 ## Goals
 
 The main purpose of SporeDB is to share information storage between several nodes that could potentially act as byzantine (faulty or malicious for instance).
 Every transaction requires a majority or unanimity of nodes endorsements before being executed, while allowing many non-conflicting transactions to be executed in parallel.
 
-Nodes are able to join and leave the network without breaking their consistency, and without slowing down the whole network; like a Mycelium always expand even when some part of it is removed.
-SporeDB is able to correctly detect network partitions and gracefully recover from it, detect byzantine nodes and report them with strong guarantees, and support up to f Byzantine nodes in a network of f+1 peers.
-By comparison, current BFT systems usually require at least 2f+1 or 3f+1 nodes.
+Nodes are able to join and leave the network without breaking their consistency, and without slowing down the whole network; like a Mycelium always expands even when some part of it is removed.
+SporeDB is able to correctly detect network partitions and gracefully recover from them, detect byzantine nodes and report them with strong guarantees, and support up to $f$ Byzantine nodes in a network of $f+1$ peers.
+By comparison, current BFT systems usually require at least $2f+1$ or $3f+1$ nodes [@castro_liskov_2002].
 
-In order to have better performances than classic BFT consensus algorithms, SporeDB follows a *Strong Eventual Consistency* (SEC [@shapiro_2011]) model, adding safety to the liveness guarantee of Eventual Consistency model.
-However, from a client communicating with a non-byzantine peer **(our default assumption)**, the SporeDB acts like any regular ACID [@haerder_reuter_1983] database, providing Atomicity, Consistency, Isolation and Durability.^[We can mix the two notions by calling SporeDB a ASecID database.]
+In order to guarantee better performances than classic BFT consensus algorithms, SporeDB follows a *Strong Eventual Consistency* (SEC [@shapiro_2011]) model, adding safety to the liveness property of Eventual Consistency models.
+However, for a client dialing with a non-byzantine peer **(our default assumption)**, the SporeDB acts like any regular ACID [@haerder_reuter_1983] database, providing Atomicity, Consistency, Isolation and Durability^[We can mix the two notions by calling SporeDB a ASecID database.].
 
 We suppose that the network is able to eventually deliver a message from a non-malicious node.
 That being said, a node that is not able to communicate with enough peers is considered byzantine.
 Thanks to a gossip communication protocol over such network, SporeDB can scale to thousands of nodes while efficiently spotting byzantine nodes.
 
-As an additionnal feature, SporeDB accepts peers that have different *local endorsement policies* without compromising the liveness of the network, while being capable of handling human validation schemes (such as manual acceptation in membership database for instance).
+As an additionnal feature, SporeDB accepts peers that have different *local endorsement policies* without compromising the liveness of the network, while being capable of handling human validation schemes (such as manual acceptation in a membership database, for instance).
 
 *Note: this document has been written outside of the academic community, but the author would be really happy to receive some help to reformulate this paper in a more formal way targetting academic publication.*
 
@@ -55,8 +55,8 @@ Transactions (spores)
 =====================
 
 The most basic blocks of the SporeDB are the Transactions, named spores.
-These spores are created by each clients to execute one or several operation(s) on the database, and are transmitted between nodes in the network for endorsement and execution.
-Read-only operations are not propagated to the network: each peer is able to read it's own state, because **each peer stores the whole database in local**.
+These spores are created by each client to execute one or several operation(s) on the database, and are transmitted between nodes in the network for endorsement and execution.
+Read-only operations are not propagated to the network: each peer is able to read its own state, because **each peer stores the whole database locally**.
 
 ## Data types
 
@@ -67,51 +67,47 @@ The SporeDB is able to store the following data types in a key-value fashion:
     * Strings
     * Arbitrary data as bytes
 * Composed data types
-    * Arrays, with ability of implementing FIFO and LIFO
+    * Arrays, with FIFO and LIFO available
     * Sets
 
 ## Spore types
 
 A spore's type represents the *operation* that would be executed on the database for a specific key.
-There might be many types for the different available data types, and this whitepaper will not be comprehensive in that regard.
+There may be many types of operations for each of the available data types, and this whitepaper will not be comprehensive in that regard.
 
 For instance:
 
-```
-On datatype Integer:
-  - GET (read-only)
-  - SET
-  - ADD
-
-On datatype Array:
-  - GET AT INDEX (read-only)
-  - RESET
-  - INSERT AT INDEX
-```
+* On datatype Integer:
+  * SET
+  * ADD
+* On datatype Array:
+  * INSERT AT INDEX
+  * DELETE AT INDEX
+  * ADD TO SET
 
 ## Conflicts between spores
 
 Conflicts will occur when several clients want to update a specific key in a conflicting manner, such as `SET x` and `SET y`.
-In order to increase performances, many transactions are designed to avoid many conflicts, even when updating the same key.
+In order to increase performance, many transactions are designed to avoid many conflicts, even when updating the same key.
 For example, two operations `ADD 5` and `ADD -3` can easily be executed at the same time without creating a conflict.
 Peers might even execute these transactions in different ways (`+5-3` or `-3+5`) without breaking the SEC property of the database.
 
-This design is heavily inspired from Redis [@redis] design.
+This design is heavily inspired from the Redis [@redis] design.
 The conflict detection and resolution-when-possible functions are the kernel of SporeDB, and the foundations for the proofs.
 
 However, sometimes it is not possible to avoid conflicts.
-To gracefully handle these cases, SporeDB maintains a version number for each key and sends this number along with the spores.
+To gracefully handle these cases, SporeDB maintains a **version number** (can be a simple hash of the value or a universal unique identifier) for each key and sends this number along with the spores.
 Peers can then compare the version number with their own state before any endorsement or execution.
-This idea comes from the HyperLedger Fabric consensus architecture [@hyperledgernext].
+This idea comes from the HyperLedger Fabric new consensus architecture [@hyperledgernext].
+
+Finally, each spore has a deadline, detailled later in this document.
 
 To conclude, a spore is structured as this:
 
 * Unique identifier
 * Deadline
-* Prerequisites
-    * Map between Keys and Latest Version Known
-* Operations
-    * List of operations
+* Prerequisites (Map between Keys and Latest Version Known)
+* List of operations
 
 Network (Mycelium)
 ==================
@@ -123,18 +119,18 @@ This section presents the way nodes discover and trust each others.
 
 Nodes have to connect to a given number of other nodes (Peers) in order to enter the Mycelium.
 SporeDB provides a way to authenticate and encrypt communications similar to the PGP Web Of Trust [@rahman_1997]:
-nodes initially specify a list of peer with an associated trust level (bootstrapping nodes), and share their public keys.
-Communications are then authenticated using one's private key, and encrypted using trusted peer's public key.
+nodes initially specify a list of peers with an associated trust level (bootstrapping nodes), and share their public keys.
+Communications are then authenticated using one's private key, and encrypted using trusted peers' public keys.
 
-A trust level specify how we trust the other node to correctly authenticate third-party nodes.
-SporeDB use standard PGP trust level (ultimate, complete, marginal and unknown), but permits some deeper customization, especially in the marginal level:
+A trust level specifies how much we trust the other node to correctly authenticate third-party nodes.
+SporeDB uses standard PGP trust level (ultimate, complete, marginal and unknown), but permits some deeper customization, especially in the marginal level:
 it is possible to require N marginal-trusted peers to confirm the same data before trusting it. SporeDB call this a N-marginal trust level.
 
 If one node doesn't completely trust any other node, it is advised to use a default (f+1)-marginal trust level, with f maximum number of byzantine nodes.
-Conflicts are hopefully quickly discovered and signaled. A user of the network would be able to lower the reputation of some nodes if he figures out some strange behaviors.
+Conflicts are hopefully quickly discovered and signaled. A user of the network would be able to lower the reputation of some nodes if he figures out some strange behaviors when receiving evidences of byzantine actions.
 
 *Note: This design, as opposed to central authentication schemes, seems to be weaker.*
-*But it obviously offers more reliability in a fully-decentralized network, while no central authority should be trusted.*
+*But it obviously offers more reliability in a fully-decentralized network, where no central authority should be trusted.*
 
 ## Discovery and synchronization
 
@@ -146,13 +142,13 @@ The SporeDB network protocol (Mycelium) is expected to be fast, but it can easil
 There is no "global clock" in the network:
 each peer chooses its own cadence for spore emission and reception, but slow nodes are more likely to slow down the network if they are critical for spore Endorsement (see consensus).
 
-When a peer enters in a stale state, because it's new to the network or it crashed during some time, he can request a state-transfer to one of several peers.
-During such transfer, peers share their global database state with the recovering node.
+When a peer enters in a stale state, because it's new in the network or it crashed for a while, it can request a state-transfer from one out of several peers.
+During such transfers, peers share their global database state with the recovering node.
 The trust levels are used to analyze the incoming data: it's easy to trust one complete-trusted peer, but it might be more interesting to compare data from several marginal-trusted peers before updating the recovering state.
 Version numbers are used to optimize the state-transfer and quickly detect byzantine behaviors.
 
 *Note: contrary to the blockchain principle, the history of the transactions are not preserved, leading to less cold-storage usage.*
-*It permits the network to quickly recover from outages, at the cost of some trust requirement.*
+*It allows the network to quickly recover from outages, at the cost of some trust requirement (mycelium web of trust).*
 
 For this whole whitepaper, it is expected that nodes are fully discovered, meaning that there is no Mycelium partition due to misconfiguration.
 To avoid intentional network partitions by byzantine nodes, one peer can ensure the network quality by connecting to at least f+1 peers.
@@ -162,9 +158,9 @@ To avoid intentional network partitions by byzantine nodes, one peer can ensure 
 
 When joining a network, the following steps are required for the new node.
 
-1. Specify bootstrapping peers. The user can give their public keys if already known (by another medium), but that's not mandatory ;
+1. Specify bootstrapping peers. The user can give their public keys if already known (by another medium), but that is not mandatory ;
 2. Fetch nodes list from the peers and merge them. Remember identical public keys signed by enough nodes in order to build a safe `(node, public_key)` dictionnary ;
-3. Announce its public key to the network, waiting for some peers to sign it if they're ready to ;
+3. Announce its public key to the network, waiting for some peers to sign it if they are ready to ;
 4. Connect to one complete-trusted or several N-marginal trusted peers to obtain a state-transfer of the database ;
 5. During the state-transfer, start listening for incoming spores ;
 6. As soon as the state-transfer is finished, start the consensus protocol for each received spore.
@@ -196,14 +192,14 @@ This is especially useful when building votes systems: a reluctant node can have
 The majority requirement defined in a global policy defines the maximum number of reluctant nodes for a spore to be executed.
 For instance, if a unanimity is required, a single reluctant node will be sufficient to discard the spore (veto).
 
-However, if one spore is endorsed by enough nodes, reluctant nodes have to accept the final consensus and execute the transaction despite their initial whish.
+However, if one spore is endorsed by enough nodes, reluctant nodes have to accept the final consensus and execute the transaction despite their initial wish.
 
 Consensus via Gossip
 ====================
 
 ## General design
 
-SporeDB is heavily relying on previous academic work on gossip protocols [@ganesh_kermarrec_massoulie_2003][@gurevich_keidar_2009][@allavena_demers_hopcroft_2005] for the interesting properties of such protocols; mainly resilience and scalability.
+SporeDB relies heavily on previous academic work on gossip protocols [@ganesh_kermarrec_massoulie_2003][@gurevich_keidar_2009][@allavena_demers_hopcroft_2005] for their interesting properties; mainly resilience and scalability.
 Gossip protocols can be used to build fast consensus algorithms [@lim_suh_gil_yu_2013] thanks to public-key cryptography.
 We chose a simple continuous gossip protocol inspired by [@georgiou_gilbert_kowalski_2010].
 Nodes relay spores to a randomly or selected set of peers by sending firstly a light metadata, and the whole spore if the peers request it.
@@ -242,7 +238,7 @@ For example, with $n = 10$ endorsers and $f = 3$ maximum number of byzantine end
 
 Some poison appears when one node endorse a spore while ignoring the Conflict Management Rules.
 In that case, thanks to the Mycelium and under our communication assumptions, it is guaranteed that *at least one node* will receive enough evidences that the concerned node has emitted some poison.
-Thanks to the cryptographic signatures included in the endorsements, it will be easy to denounce the poisonous node with the collected, poisonous endorsements. Other peers may be able to report the issue and act accordingly (like lower the trust in the poisonous node, avoid any communication with it, etc).
+Thanks to the cryptographic signatures included in the endorsements, it will be easy to denounce the poisonous node with the collected, poisonous endorsements. Other peers may be able to report the issue and act accordingly (for instance lower the trust in the poisonous node, avoid any communication with it, etc).
 
 Despite the interesting properties provided by the consensus algorithm, a node might being corrupted.
 This can be the case for nodes acting as faulty during a period of time, and trying to recover from a corrupted state.
@@ -272,7 +268,7 @@ We consider a network of $n$ endorsing nodes with at most $f$ byzantine nodes.
 
 1. The PDG is $(f+1)$-strongly-connected, and each node relays messages to at least $f+1$ peers ;
 2. The communications between two non-byzantine peers are possible in a finite amount of time ;
-3. Every non-byzantine node has enough non-byzantine peers in their web of trusts to execute safe state-transfers ;
+3. Every non-byzantine node has enough non-byzantine peers in their web of trust to execute safe state-transfers ;
 4. Every non-byzantine node has the same initial state ;
 5. Every non-byzantine node has a clock synced with at most $\delta$ delta ;
 6. Messages cannot be spoofed or corrupted, and nodes are computationnaly-bounded to preserve public-key cryptography safety ;
@@ -288,7 +284,7 @@ In order to prove the safety of SporeDB, we prove that the database and its cons
 The PDG remains strongly connected (1) even if up to $f$ nodes stop relaying messages to their peers (acting as byzantine).
 A message containing a invalid signature will be ignored, and the emitting peer considered as part of the byzantine nodes thanks to the assumption (6).
 Therefore, each node in the remaining peer graph is able to send a message to any other node in a finite number of relays.
-Finally, with (2), it exists a upper bound to the duration between the sending of a message and its reception by every non-byzantine node.
+Finally, with (2), there exists a upper bound to the duration between the sending of a message and its reception by every non-byzantine node.
 This is a contradiction, the Lemma 1 is true. $\square$
 
 \ \
@@ -317,7 +313,7 @@ This is a contradiction. The Theorem 1 is true. $\square$
 **Theorem 2 (Strong Eventual Consistency)** - *Every spore will produce the same set of updates in every non-byzantine node within a long-enough grace period, eventually leading to the same global state in the whole network.*
 
 **Proof**:
-Let's assume that the Theorem 2 is wrong and that the grace period of a spore $G(S)$ is longer enough compared to the deadline of spore $D(S)$ and $\tau$.
+Let's assume that the Theorem 2 is wrong and that the grace period of a spore $G(S)$ is long enough compared to the deadline of spore $D(S)$ and $\tau$.
 $$
 G(s) \geqslant D(s) + \tau
 $$
@@ -326,7 +322,7 @@ It is then impossible to execute spores after the end of the grace period thanks
 Additionnaly, given the Theorem 1, we can say that either a spore is completely executed or completely ignored on a non-byzantine node.
 
 We also know that every non-byzantine node owns the same global policy (Lemma 2) and we assume that every non-byzantine node is in the same state (4).
-Hence, if one non-byzantine node executes a spore, others will also executes this spore (**Yielding** rule) **unless** they've applied a conflicting spore in the meantime (**Consistency** rule).
+Hence, if one non-byzantine node executes a spore, others will also execute this spore (**Yielding** rule) **unless** they've applied a conflicting spore in the meantime (**Consistency** rule).
 Given all these assumptions, Theorem 2 is wrong **if and only if** at least two non-byzantine nodes receive enough conflicting endorsements to execute conflicting spores, leading to a fork in database contents.
 
 However, given the **Promise** rule, only byzantine endorsers can announce two conflicting endorsements.
@@ -384,6 +380,11 @@ In practice, choosing good values for the deadline $D(s)$ leads to optimal value
 Failed or satured nodes are gracefully handled, considering them as byzantine nodes; and recovering them using trusted state-transfers.
 
 SporeDB is being implemented in an open-source governance model in order to evaluate and verify the assumptions made in this paper.
+
+Acknowledgements {-}
+----------------
+
+We thank Quentin Dauchy and anonymous reviewers for their useful comments and suggestions on the different drafts of this paper.
 
 References
 ==========
