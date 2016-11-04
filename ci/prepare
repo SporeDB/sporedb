@@ -1,0 +1,4 @@
+GODIR=$GOPATH/src/gitlab.com/SporeDB/sporedb
+mkdir -p "$(dirname "$GODIR")"
+ln -sfv "$(pwd -P)" "$GODIR"
+cd "$GODIR"
