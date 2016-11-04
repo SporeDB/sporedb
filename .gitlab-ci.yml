@@ -1,0 +1,18 @@
+image: lesterpig/sporedb-ci:latest
+
+stages:
+  - test
+
+before_script:
+  - source ci/prepare
+  - make
+
+unit tests:
+  stage: test
+  script:
+    - go test -v -cover ./...
+
+code lint:
+  stage: test
+  script:
+    - make lint
