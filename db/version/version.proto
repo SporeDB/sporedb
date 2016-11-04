@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package version;
+
+message V {
+	bytes hash = 1;
+}
