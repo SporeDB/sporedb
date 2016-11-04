@@ -1,0 +1,19 @@
+image: lesterpig/sporedb-ci:latest
+
+stages:
+  - test
+
+before_script:
+  - source ci/prepare
+
+unit tests:
+  stage: test
+  script:
+    - make
+    - go test -cover ./...
+
+code lint:
+  stage: test
+  script:
+    - go get github.com/stretchr/testify/require
+    - make lint
