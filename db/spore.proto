@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package db;
+import "google/protobuf/timestamp.proto";
+import "db/version/version.proto";
+
+message Spore {
+	string uuid = 1;
+	string policy = 2;
+	google.protobuf.Timestamp deadline = 3;
+	map<string, version.V> requirements = 4;
+	repeated Operation operations = 5;
+}
+
+message Operation {
+	string key = 1;
+	enum Op {
+		// Operations on every values
+		SET = 0;
+		CONCAT = 1;
+		// Operations on numeric values
+		ADD = 10;
+		MUL = 11;
+	}
+	Op op = 2;
+	bytes data = 3;
+	bytes metadata = 4;
+}

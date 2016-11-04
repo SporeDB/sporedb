@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package db;
+import "google/protobuf/duration.proto";
+
+message Policy {
+	string uuid = 1;
+	string comment = 2;
+
+	repeated Endorser endorsers = 3;
+	uint64 quorum = 4;
+
+	google.protobuf.Duration timeout = 5;
+	google.protobuf.Duration grace_period = 6;
+	uint64 max_size = 7;
+	uint64 max_op_size = 8;
+
+	repeated OSpec specs = 9;
+	bool strict = 10;
+}
+
+message Endorser {
+	bytes certificate = 1;
+	string comment = 2;
+}
+
+message OSpec {
+	oneof key {
+		string name = 1;
+		string regex = 2;
+	}
+	OType type = 3;
+	uint64 max_size = 4;
+}
+
+enum OType {
+	RAW = 0;
+	NUMBER = 1;
+}
