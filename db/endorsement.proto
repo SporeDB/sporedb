@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package db;
+
+message Endorsement {
+	string emitter = 1;
+	bytes signature = 2;
+	string uuid = 3;
+}
