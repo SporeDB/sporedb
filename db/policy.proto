@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package db;
+import "db/spore.proto";
 import "google/protobuf/duration.proto";
 
 message Policy {
@@ -29,11 +30,7 @@ message OSpec {
 		string name = 1;
 		string regex = 2;
 	}
-	OType type = 3;
 	uint64 max_size = 4;
+	repeated Operation.Op allowed_operations = 5;
 }
 
-enum OType {
-	RAW = 0;
-	NUMBER = 1;
-}

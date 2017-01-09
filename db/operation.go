@@ -42,13 +42,14 @@ func (o *Operation) CheckConflict(o2 *Operation) error {
 }
 
 // CheckDoability verifies that a given operation is valid against a specific object.
-func (o *Operation) CheckDoability(data []byte) error {
+func (o *Operation) CheckDoability(data []byte) (simulation []byte, err error) {
 	if NumericOperations[o.Op] {
 		// Check data
 		f := &big.Float{}
-		err := f.UnmarshalText(o.Data)
+		err = f.UnmarshalText(o.Data)
 		if err != nil {
-			return errors.New("non-numeric data value")
+			err = errors.New("non-numeric data value")
+			return
 		}
 
 		// Check stored value
@@ -56,10 +57,11 @@ func (o *Operation) CheckDoability(data []byte) error {
 			f = &big.Float{}
 			err = f.UnmarshalText(data)
 			if err != nil {
-				return errors.New("non-numeric stored value")
+				err = errors.New("non-numeric stored value")
+				return
 			}
 		}
 	}
 
-	return nil
+	return
 }

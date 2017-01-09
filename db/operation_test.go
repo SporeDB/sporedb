@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -49,20 +50,33 @@ func TestOperation_CheckDoability(t *testing.T) {
 	opMul := &Operation{Op: Operation_MUL, Data: []byte("1.000000001e-22")}
 	opBad := &Operation{Op: Operation_MUL, Data: []byte("bad")}
 
-	t.Run("RAW", func(t *testing.T) {
-		require.Nil(t, opSet.CheckDoability([]byte("world")))
-		require.Nil(t, opSet.CheckDoability(nil))
-	})
+	type checkDoabilityCase struct {
+		op          *Operation
+		data        []byte
+		errExpected bool
+	}
+	testCases := []checkDoabilityCase{
+		{opSet, []byte("world"), false},
+		{opSet, nil, false},
+		{opAdd, []byte("2.5"), false},
+		{opMul, []byte("2.5"), false},
+		{opAdd, []byte{}, false},
+		{opMul, []byte{}, false},
+		{opAdd, nil, false},
+		{opMul, nil, false},
+		{opAdd, []byte("2.x"), true},
+		{opMul, []byte("2.x"), true},
+		{opBad, []byte("2.5"), true},
+	}
 
-	t.Run("NUMERIC CHECK TYPE", func(t *testing.T) {
-		require.Nil(t, opAdd.CheckDoability([]byte("2.5")))
-		require.Nil(t, opMul.CheckDoability([]byte("2.5")))
-		require.Nil(t, opAdd.CheckDoability([]byte{}))
-		require.Nil(t, opMul.CheckDoability([]byte{}))
-		require.Nil(t, opAdd.CheckDoability(nil))
-		require.Nil(t, opMul.CheckDoability(nil))
-		require.NotNil(t, opAdd.CheckDoability([]byte("2.x")))
-		require.NotNil(t, opMul.CheckDoability([]byte("2.x")))
-		require.NotNil(t, opBad.CheckDoability([]byte("2.5")))
-	})
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s %s", tc.op.Op.String(), tc.data), func(t *testing.T) {
+			_, err := tc.op.CheckDoability(tc.data)
+			if !tc.errExpected {
+				require.Nil(t, err)
+			} else {
+				require.NotNil(t, err)
+			}
+		})
+	}
 }

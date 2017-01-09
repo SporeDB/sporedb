@@ -1,19 +1,25 @@
 package db
 
 import (
+	"regexp"
 	"sync"
 	"time"
 )
 
 // DB is the main structure for database management of a node.
 type DB struct {
-	Store        Store
+	Store Store
+
+	// Policy management
+	policies    map[string]*Policy
+	policiesReg map[string][]*regexp.Regexp
+
+	// Spore flow management
 	staging      map[string]*dbTrigger
 	stagingMutex sync.RWMutex
 	waiting      map[string]*dbTrigger
 	waitingMutex sync.RWMutex
-
-	gc chan *Spore
+	gc           chan *Spore
 }
 
 type dbTrigger struct {
@@ -25,11 +31,24 @@ type dbTrigger struct {
 // NewDB instanciates a new database with clean initialization.
 func NewDB(s Store) *DB {
 	return &DB{
-		Store:   s,
-		staging: make(map[string]*dbTrigger),
-		waiting: make(map[string]*dbTrigger),
-		gc:      make(chan *Spore),
+		Store:       s,
+		policies:    make(map[string]*Policy),
+		policiesReg: make(map[string][]*regexp.Regexp),
+		staging:     make(map[string]*dbTrigger),
+		waiting:     make(map[string]*dbTrigger),
+		gc:          make(chan *Spore),
 	}
+}
+
+// AddPolicy registers a new policy for the database.
+func (db *DB) AddPolicy(p *Policy) error {
+	regexes, err := p.compileRegexes()
+	if err != nil {
+		return err
+	}
+
+	db.policies[p.Uuid], db.policiesReg[p.Uuid] = p, regexes
+	return nil
 }
 
 // Start starts the database, waiting for incoming spores to be processed.
@@ -56,11 +75,13 @@ func (db *DB) Start(blocking bool) {
 				} else if err == ErrDeadlineExpired {
 					v.channel <- nil
 					delete(db.waiting, k)
+				} else {
 				}
 			}
 
 			db.waitingMutex.Unlock()
 		}
+
 		wg.Done()
 	}()
 

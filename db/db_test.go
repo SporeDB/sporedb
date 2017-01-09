@@ -18,6 +18,8 @@ func getTestingDB(t *testing.T) (db *DB, done func()) {
 	require.Nil(t, err)
 
 	db = NewDB(store)
+	require.Nil(t, db.AddPolicy(NonePolicy))
+
 	done = func() {
 		_ = store.Close()
 		_ = os.RemoveAll(path)
@@ -33,7 +35,11 @@ func TestDeadlineToDuration(t *testing.T) {
 
 func TestDB_Single(t *testing.T) {
 	db, done := getTestingDB(t)
-	defer done()
+	ch := make(chan bool)
+	defer func() {
+		<-ch // wait for goroutine termination
+		done()
+	}()
 
 	db.Start(false)
 
@@ -62,8 +68,9 @@ func TestDB_Single(t *testing.T) {
 	}}
 
 	go func() {
-		require.NotNil(t, db.Endorse(a))
-		require.NotNil(t, db.Endorse(c))
+		db.Endorse(a)
+		db.Endorse(c)
+		ch <- true
 	}()
 
 	require.NotNil(t, db.Endorse(b))
@@ -74,10 +81,13 @@ func TestDB_Single(t *testing.T) {
 	db.waitingMutex.RLock()
 	db.stagingMutex.RLock()
 
+	require.NotNil(t, db.staging[a.Uuid])
+	require.NotNil(t, db.staging[b.Uuid])
 	require.Exactly(t, a, db.staging[a.Uuid].spore)
 	require.Exactly(t, b, db.staging[b.Uuid].spore)
 	require.Nil(t, db.staging[c.Uuid])
 
+	require.NotNil(t, db.waiting[c.Uuid])
 	require.Exactly(t, c, db.waiting[c.Uuid].spore)
 	require.Nil(t, db.waiting[a.Uuid])
 	require.Nil(t, db.waiting[b.Uuid])
@@ -91,6 +101,7 @@ func TestDB_Single(t *testing.T) {
 	db.waitingMutex.RLock()
 	db.stagingMutex.RLock()
 
+	require.NotNil(t, db.staging[c.Uuid])
 	require.Exactly(t, c, db.staging[c.Uuid].spore)
 	require.Nil(t, db.staging[a.Uuid])
 

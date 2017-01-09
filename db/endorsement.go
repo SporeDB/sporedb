@@ -38,7 +38,13 @@ func (db *DB) CanEndorse(s *Spore) error {
 
 	for _, op := range s.Operations {
 		d, _, _ := db.Store.Get(op.Key)
-		err := op.CheckDoability(d)
+		sim, err := op.CheckDoability(d)
+		if err != nil {
+			db.Store.Unlock()
+			return err
+		}
+
+		err = db.Check(s.Policy, op, sim)
 		if err != nil {
 			db.Store.Unlock()
 			return err
