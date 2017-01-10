@@ -44,36 +44,38 @@ func TestOperation_CheckConflict(t *testing.T) {
 	})
 }
 
-func TestOperation_CheckDoability(t *testing.T) {
+func TestOperation_Exec(t *testing.T) {
 	opSet := &Operation{Op: Operation_SET, Data: []byte("hello")}
 	opAdd := &Operation{Op: Operation_ADD, Data: []byte("1.5")}
-	opMul := &Operation{Op: Operation_MUL, Data: []byte("1.000000001e-22")}
+	opMul := &Operation{Op: Operation_MUL, Data: []byte("3")}
 	opBad := &Operation{Op: Operation_MUL, Data: []byte("bad")}
 
-	type checkDoabilityCase struct {
+	type execCase struct {
 		op          *Operation
 		data        []byte
+		resExpected []byte
 		errExpected bool
 	}
-	testCases := []checkDoabilityCase{
-		{opSet, []byte("world"), false},
-		{opSet, nil, false},
-		{opAdd, []byte("2.5"), false},
-		{opMul, []byte("2.5"), false},
-		{opAdd, []byte{}, false},
-		{opMul, []byte{}, false},
-		{opAdd, nil, false},
-		{opMul, nil, false},
-		{opAdd, []byte("2.x"), true},
-		{opMul, []byte("2.x"), true},
-		{opBad, []byte("2.5"), true},
+	testCases := []execCase{
+		{opSet, []byte("world"), []byte("hello"), false},
+		{opSet, nil, []byte("hello"), false},
+		{opAdd, []byte("2.5"), []byte("4"), false},
+		{opMul, []byte("2.5"), []byte("7.5"), false},
+		{opAdd, []byte{}, []byte("1.5"), false},
+		{opMul, []byte{}, []byte("0"), false},
+		{opAdd, nil, []byte("1.5"), false},
+		{opMul, nil, []byte("0"), false},
+		{opAdd, []byte("2.x"), nil, true},
+		{opMul, []byte("2.x"), nil, true},
+		{opBad, []byte("2.5"), nil, true},
 	}
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%s %s", tc.op.Op.String(), tc.data), func(t *testing.T) {
-			_, err := tc.op.CheckDoability(tc.data)
+		t.Run(fmt.Sprintf("%s/%s", tc.op.Op.String(), tc.data), func(t *testing.T) {
+			res, err := tc.op.Exec(tc.data)
 			if !tc.errExpected {
 				require.Nil(t, err)
+				require.Exactly(t, tc.resExpected, res)
 			} else {
 				require.NotNil(t, err)
 			}
