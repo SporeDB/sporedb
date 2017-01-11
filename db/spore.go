@@ -45,5 +45,9 @@ func (s *Spore) CheckConflict(s2 *Spore) error {
 }
 
 func (s *Spore) checkDeadline() bool {
+	if s.Deadline == nil {
+		return true
+	}
+
 	return s.Deadline.Seconds >= time.Now().Unix()
 }

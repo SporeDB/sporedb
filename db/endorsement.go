@@ -67,7 +67,7 @@ func (db *DB) CanEndorse(s *Spore) error {
 
 // Endorse tries to endorse a Spore, calling CanEndorse before any operation.
 // It either adds the Spore to the staging list, pending list or discards it.
-func (db *DB) Endorse(s *Spore) {
+func (db *DB) Endorse(s *Spore) error {
 	err := db.CanEndorse(s)
 	if err == ErrConflictingWithStaging {
 		db.waitingMutex.Lock()
@@ -75,9 +75,12 @@ func (db *DB) Endorse(s *Spore) {
 			spore: s,
 		}
 		db.waitingMutex.Unlock()
+		return nil
 	} else if err == nil {
 		db.executeEndorsement(s)
+		return nil
 	}
+	return err
 }
 
 func (db *DB) executeEndorsement(s *Spore) {

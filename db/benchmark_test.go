@@ -26,7 +26,7 @@ func genericDBBench(b *testing.B, op Operation_Op) {
 				Data: []byte("1"),
 			}}
 
-			db.Endorse(s)
+			_ = db.Endorse(s)
 		}
 	})
 }

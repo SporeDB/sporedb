@@ -50,7 +50,7 @@ func TestDB_Single_Quorum1(t *testing.T) {
 		Data: []byte("5.42"),
 	}}
 
-	db.Endorse(s)
+	_ = db.Endorse(s)
 
 	// Give some time
 	time.Sleep(10 * time.Millisecond)
@@ -102,12 +102,12 @@ func TestDB_Single_Quorum2(t *testing.T) {
 	}}
 
 	go func() {
-		db.Endorse(a)
-		db.Endorse(c)
+		_ = db.Endorse(a)
+		_ = db.Endorse(c)
 		ch <- true
 	}()
 
-	db.Endorse(b)
+	_ = db.Endorse(b)
 
 	// Check buffers after a short delay
 	time.Sleep(10 * time.Millisecond)

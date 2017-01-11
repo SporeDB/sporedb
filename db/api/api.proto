@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package api;
+import "db/spore.proto";
+import "db/version/version.proto";
+
+service SporeDB {
+	rpc Get(Key) returns (Value) {}
+	rpc Submit(Transaction) returns (Receipt) {}
+}
+
+message Key {
+	string key = 1;
+}
+
+message Value {
+	version.V version = 1;
+	bytes data = 2;
+}
+
+message Transaction {
+	string policy = 1;
+	map<string, version.V> requirements = 2;
+	repeated db.Operation operations = 3;
+}
+
+message Receipt {
+	string uuid = 1;
+}

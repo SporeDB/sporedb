@@ -1,0 +1,6 @@
+db:
+  path: .db
+  none_policy: true
+
+api:
+  listen: "localhost:4200"
