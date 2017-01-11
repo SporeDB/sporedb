@@ -61,6 +61,25 @@ func (s *S) Set(key string, value []byte, v *version.V) error {
 	return s.db.Put(wo, []byte(key), append(rawVersion[:version.VersionBytes], value...))
 }
 
+// SetBatch executes the given "Set" operations in a atomic way.
+func (s *S) SetBatch(keys []string, values [][]byte, versions []*version.V) error {
+	if len(keys) != len(values) || len(values) != len(versions) {
+		return errors.New("invalid arguments")
+	}
+
+	batch := gorocksdb.NewWriteBatch()
+	for i, k := range keys {
+		rv, err := versions[i].MarshalBinary()
+		if err != nil {
+			return err
+		}
+
+		batch.Put([]byte(k), append(rv[:version.VersionBytes], values[i]...))
+	}
+
+	return s.db.Write(wo, batch)
+}
+
 // Close should be used after using the RocksDB store.
 func (s *S) Close() error {
 	s.db.Close()

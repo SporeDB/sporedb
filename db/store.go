@@ -18,6 +18,8 @@ type Store interface {
 	Get(key string) (value []byte, version *version.V, err error)
 	// Set sets the value and the version that must be stored for the specified key.
 	Set(key string, value []byte, version *version.V) error
+	// SetBatch executes the given "Set" operations in a atomic way.
+	SetBatch(keys []string, values [][]byte, versions []*version.V) error
 }
 
 // GetTestStore returns a default store for testing purposes.

@@ -53,6 +53,32 @@ func TestS_PutGet(t *testing.T) {
 	}
 }
 
+func TestS_PutGetBatch(t *testing.T) {
+	keys := []string{
+		"testBatch_a",
+		"testBatch_b",
+		"testBatch_c",
+	}
+	values := [][]byte{
+		[]byte("Hello"),
+		[]byte("World!"),
+		[]byte{},
+	}
+
+	versions := make([]*version.V, len(keys))
+	for i, v := range values {
+		versions[i] = version.New(v)
+	}
+
+	require.Nil(t, ts.SetBatch(keys, values, versions))
+	for i, k := range keys {
+		value, v, err := ts.Get(k)
+		require.Nil(t, err)
+		require.Nil(t, v.Matches(versions[i]))
+		require.Exactly(t, values[i], value)
+	}
+}
+
 func TestS_Get_Unknown(t *testing.T) {
 	_, v, err := ts.Get("testUnknown")
 	require.NotNil(t, err)

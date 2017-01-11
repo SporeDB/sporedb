@@ -33,13 +33,47 @@ func TestDeadlineToDuration(t *testing.T) {
 	require.InDelta(t, int64(time.Second), int64(deadlineToDuration(s.Deadline)), float64(time.Millisecond))
 }
 
-func TestDB_Single(t *testing.T) {
+func TestDB_Single_Quorum1(t *testing.T) {
+	db, done := getTestingDB(t)
+	defer done()
+
+	db.Start(false)
+	s := NewSpore()
+	s.SetTimeout(200 * time.Millisecond)
+	s.Operations = []*Operation{{
+		Key:  "keyA",
+		Op:   Operation_SET,
+		Data: []byte("Hello"),
+	}, {
+		Key:  "keyB",
+		Op:   Operation_ADD,
+		Data: []byte("5.42"),
+	}}
+
+	db.Endorse(s)
+
+	// Give some time
+	time.Sleep(10 * time.Millisecond)
+
+	value, _, err := db.Get("keyA")
+	require.Nil(t, err)
+	require.Exactly(t, []byte("Hello"), value)
+
+	value, _, err = db.Get("keyB")
+	require.Nil(t, err)
+	require.Exactly(t, []byte("5.42"), value)
+}
+
+func TestDB_Single_Quorum2(t *testing.T) {
 	db, done := getTestingDB(t)
 	ch := make(chan bool)
 	defer func() {
 		<-ch // wait for goroutine termination
 		done()
 	}()
+
+	// Change policy to force Quorum
+	db.policies["none"].Quorum = 2
 
 	db.Start(false)
 
@@ -73,7 +107,7 @@ func TestDB_Single(t *testing.T) {
 		ch <- true
 	}()
 
-	require.NotNil(t, db.Endorse(b))
+	db.Endorse(b)
 
 	// Check buffers after a short delay
 	time.Sleep(10 * time.Millisecond)

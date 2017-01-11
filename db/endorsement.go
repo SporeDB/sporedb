@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/timestamp"
@@ -66,24 +67,26 @@ func (db *DB) CanEndorse(s *Spore) error {
 
 // Endorse tries to endorse a Spore, calling CanEndorse before any operation.
 // It either adds the Spore to the staging list, pending list or discards it.
-func (db *DB) Endorse(s *Spore) *Endorsement {
+func (db *DB) Endorse(s *Spore) {
 	err := db.CanEndorse(s)
 	if err == ErrConflictingWithStaging {
 		db.waitingMutex.Lock()
-		c := make(chan *Endorsement, 1)
 		db.waiting[s.Uuid] = &dbTrigger{
-			channel: c,
-			spore:   s,
+			spore: s,
 		}
 		db.waitingMutex.Unlock()
-		return <-c
 	} else if err == nil {
-		return db.executeEndorsement(s)
+		db.executeEndorsement(s)
 	}
-	return nil
 }
 
-func (db *DB) executeEndorsement(s *Spore) *Endorsement {
+func (db *DB) executeEndorsement(s *Spore) {
+	// Is the policy only requires one endorsement, bypass staging list
+	if db.policies[s.Policy].Quorum <= 1 {
+		_ = db.Apply(s)
+		return
+	}
+
 	db.stagingMutex.Lock()
 	defer db.stagingMutex.Unlock()
 
@@ -92,12 +95,57 @@ func (db *DB) executeEndorsement(s *Spore) *Endorsement {
 		func() { db.gc <- s },
 	)
 
+	e := &Endorsement{}
+
 	db.staging[s.Uuid] = &dbTrigger{
-		timer: timer,
-		spore: s,
+		timer:        timer,
+		spore:        s,
+		endorsements: []*Endorsement{e},
+	}
+}
+
+// AddEndorsement registers the incoming endorsement.
+func (db *DB) AddEndorsement(e *Endorsement) {
+	addEndorsementMap(e, db.waiting, &db.waitingMutex)
+	trigger := addEndorsementMap(e, db.staging, &db.stagingMutex)
+
+	if trigger == nil {
+		return
 	}
 
-	return &Endorsement{}
+	// Should we execute the spore?
+	db.stagingMutex.Lock()
+	defer db.stagingMutex.Unlock()
+
+	policy := db.policies[trigger.spore.Policy]
+	if policy.Quorum <= uint64(len(trigger.endorsements)) {
+		trigger.timer.Stop()
+		delete(db.staging, trigger.spore.Uuid)
+		go func() { _ = db.Apply(trigger.spore) }()
+	}
+}
+
+func addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu sync.Locker) *dbTrigger {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Spore being processed?
+	trigger, ok := ma[e.Uuid]
+	if !ok {
+		return nil // TODO retry till timeout or spore reception
+	}
+
+	// Already registered endorsement?
+	for _, e2 := range trigger.endorsements {
+		if e.Emitter == e2.Emitter {
+			return nil
+		}
+	}
+
+	// TODO check crypto
+
+	trigger.endorsements = append(trigger.endorsements, e)
+	return trigger
 }
 
 func deadlineToDuration(t *timestamp.Timestamp) time.Duration {
