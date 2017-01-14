@@ -1,0 +1,11 @@
+identity: alice
+
+db:
+  path: .db_alice
+  none_policy: true
+
+mycelium:
+  listen: "localhost:4010"
+
+api:
+  listen: "localhost:4000"

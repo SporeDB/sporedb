@@ -1,6 +1,13 @@
+identity: test
+
 db:
   path: .db
   none_policy: true
+
+mycelium:
+  listen: "localhost:4210"
+  peers:
+    # - "remote:4210"
 
 api:
   listen: "localhost:4200"

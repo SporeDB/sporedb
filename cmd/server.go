@@ -11,6 +11,7 @@ import (
 	"gitlab.com/SporeDB/sporedb/db"
 	"gitlab.com/SporeDB/sporedb/db/drivers/rocksdb"
 	endpoint "gitlab.com/SporeDB/sporedb/db/server"
+	"gitlab.com/SporeDB/sporedb/myc"
 )
 
 var serverCmd = &cobra.Command{
@@ -23,7 +24,7 @@ var serverCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		database := db.NewDB(store)
+		database := db.NewDB(store, viper.GetString("identity"))
 		if viper.GetBool("db.none_policy") {
 			fmt.Println("WARNING: The database has the \"none\" policy enabled,")
 			fmt.Println("         this should be reserved for testing and development only")
@@ -35,6 +36,18 @@ var serverCmd = &cobra.Command{
 			Listen: viper.GetString("api.listen"),
 		}
 
+		rawPeers := viper.GetStringSlice("mycelium.peers")
+		peers := make([]*myc.Node, len(rawPeers))
+		for i, p := range rawPeers {
+			peers[i] = &myc.Node{Address: p}
+		}
+
+		mycelium, _ := myc.NewMycelium(&myc.MyceliumConfig{
+			Listen: viper.GetString("mycelium.listen"),
+			Peers:  peers,
+			DB:     database,
+		})
+
 		// Catch SIGINT
 		go func() {
 			c := make(chan os.Signal, 1)
@@ -42,6 +55,7 @@ var serverCmd = &cobra.Command{
 			for range c {
 				fmt.Println("\nStopping SporeDB...")
 				_ = store.Close()
+				_ = mycelium.Close()
 				database.Stop()
 				os.Exit(0)
 			}

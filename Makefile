@@ -21,3 +21,10 @@ lint: install
 		--disable interfacer \
 		./...
 
+test: install
+	@go test -cover $(BASE_PATH)/db
+	@go test -cover $(BASE_PATH)/db/drivers/rocksdb
+	@go test -cover $(BASE_PATH)/db/version
+	@go test -cover $(BASE_PATH)/myc
+	@go test -cover $(BASE_PATH)/myc/protocol
+

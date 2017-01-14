@@ -9,8 +9,7 @@ before_script:
 unit tests:
   stage: test
   script:
-    - make
-    - go test -cover ./...
+    - make test
 
 code lint:
   stage: test

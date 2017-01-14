@@ -32,7 +32,7 @@ func (s *Server) Submit(ctx context.Context, tx *api.Transaction) (*api.Receipt,
 	spore.Requirements = tx.Requirements
 	spore.Operations = tx.Operations
 
-	return &api.Receipt{Uuid: spore.Uuid}, s.DB.Endorse(spore)
+	return &api.Receipt{Uuid: spore.Uuid}, s.DB.Submit(spore)
 }
 
 // Serve starts the SporeDB GRPC server for clients.

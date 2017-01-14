@@ -1,16 +1,21 @@
 package db
 
 import (
+	"fmt"
 	"regexp"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
 
 	"gitlab.com/SporeDB/sporedb/db/version"
 )
 
 // DB is the main structure for database management of a node.
 type DB struct {
-	Store Store
+	Store    Store
+	Identity string
+	Messages chan proto.Message
 
 	// Policy management
 	policies    map[string]*Policy
@@ -31,9 +36,11 @@ type dbTrigger struct {
 }
 
 // NewDB instanciates a new database with clean initialization.
-func NewDB(s Store) *DB {
+func NewDB(s Store, identity string) *DB {
 	return &DB{
 		Store:       s,
+		Identity:    identity,
+		Messages:    make(chan proto.Message, 16),
 		policies:    make(map[string]*Policy),
 		policiesReg: make(map[string][]*regexp.Regexp),
 		staging:     make(map[string]*dbTrigger),
@@ -124,5 +131,6 @@ func (db *DB) Apply(s *Spore) error {
 		versions[i] = version.New(values[i])
 	}
 
+	fmt.Println("Applying transaction", s.Uuid)
 	return db.Store.SetBatch(keys, values, versions)
 }

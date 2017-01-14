@@ -1,0 +1,12 @@
+identity: bob
+
+db:
+  path: .db_bob
+  none_policy: true
+
+mycelium:
+  peers:
+    - "localhost:4010"
+
+api:
+  listen: "localhost:4100"

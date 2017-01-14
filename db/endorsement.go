@@ -65,6 +65,12 @@ func (db *DB) CanEndorse(s *Spore) error {
 	return nil
 }
 
+// Submit broadcasts the Spore to the Mycelium, then tries to endorse it with current state.
+func (db *DB) Submit(s *Spore) error {
+	db.Messages <- s
+	return db.Endorse(s)
+}
+
 // Endorse tries to endorse a Spore, calling CanEndorse before any operation.
 // It either adds the Spore to the staging list, pending list or discards it.
 func (db *DB) Endorse(s *Spore) error {
@@ -84,6 +90,13 @@ func (db *DB) Endorse(s *Spore) error {
 }
 
 func (db *DB) executeEndorsement(s *Spore) {
+	e := &Endorsement{
+		Emitter: db.Identity,
+		Uuid:    s.Uuid,
+	}
+
+	db.Messages <- e // Broadcast our endorsement for this spore
+
 	// Is the policy only requires one endorsement, bypass staging list
 	if db.policies[s.Policy].Quorum <= 1 {
 		_ = db.Apply(s)
@@ -97,8 +110,6 @@ func (db *DB) executeEndorsement(s *Spore) {
 		deadlineToDuration(s.Deadline),
 		func() { db.gc <- s },
 	)
-
-	e := &Endorsement{}
 
 	db.staging[s.Uuid] = &dbTrigger{
 		timer:        timer,

@@ -17,7 +17,7 @@ func getTestingDB(t *testing.T) (db *DB, done func()) {
 	store, err := rocksdb.New(path)
 	require.Nil(t, err)
 
-	db = NewDB(store)
+	db = NewDB(store, "test")
 	require.Nil(t, db.AddPolicy(NonePolicy))
 
 	done = func() {
