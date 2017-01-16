@@ -2,7 +2,8 @@ identity: alice
 
 db:
   path: .db_alice
-  none_policy: true
+  policies:
+    - ../solo.json
 
 mycelium:
   listen: "localhost:4010"

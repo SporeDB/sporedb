@@ -49,7 +49,6 @@ func (c *Client) CLI() {
 	defer func() { _ = rl.Close() }()
 
 	m := c.getCLIMap()
-	c.policy = "none"
 
 	for {
 		line, err := rl.Readline()

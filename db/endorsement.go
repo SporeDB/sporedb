@@ -163,6 +163,10 @@ func addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu sync.Locker)
 }
 
 func deadlineToDuration(t *timestamp.Timestamp) time.Duration {
+	if t == nil {
+		return time.Hour
+	}
+
 	deadline := time.Unix(t.Seconds, int64(t.Nanos))
 	return deadline.Sub(time.Now())
 }

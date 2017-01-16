@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -11,6 +9,7 @@ import (
 )
 
 var addrSrv *string
+var policySrv *string
 var timeoutSrv *time.Duration
 
 // clientCmd represents the client command
@@ -23,11 +22,10 @@ var clientCmd = &cobra.Command{
 			Timeout: *timeoutSrv,
 		}
 
-		if err := cli.Connect(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
+		err := cli.Connect()
+		check(err)
 
+		cli.SetPolicy(*policySrv)
 		cli.CLI()
 		cli.Close()
 	},
@@ -37,4 +35,5 @@ func init() {
 	RootCmd.AddCommand(clientCmd)
 	addrSrv = clientCmd.Flags().StringP("server", "s", "localhost:4200", "server address")
 	timeoutSrv = clientCmd.Flags().DurationP("timeout", "t", 10*time.Second, "connection timeout")
+	policySrv = clientCmd.Flags().StringP("policy", "p", "none", "default policy to use when submitting")
 }

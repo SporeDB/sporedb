@@ -2,7 +2,8 @@ identity: bob
 
 db:
   path: .db_bob
-  none_policy: true
+  policies:
+    - ../solo.json
 
 mycelium:
   peers:

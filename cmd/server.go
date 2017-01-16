@@ -19,17 +19,10 @@ var serverCmd = &cobra.Command{
 	Short: "Run a SporeDB node",
 	Run: func(cmd *cobra.Command, args []string) {
 		store, err := rocksdb.New(viper.GetString("db.path"))
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
+		check(err)
 
 		database := db.NewDB(store, viper.GetString("identity"))
-		if viper.GetBool("db.none_policy") {
-			fmt.Println("WARNING: The database has the \"none\" policy enabled,")
-			fmt.Println("         this should be reserved for testing and development only")
-			_ = database.AddPolicy(db.NonePolicy)
-		}
+		loadPolicies(database)
 
 		srv := &endpoint.Server{
 			DB:     database,
