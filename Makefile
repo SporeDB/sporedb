@@ -27,4 +27,5 @@ test: install
 	@go test -cover $(BASE_PATH)/db/version
 	@go test -cover $(BASE_PATH)/myc
 	@go test -cover $(BASE_PATH)/myc/protocol
+	@go test -cover $(BASE_PATH)/myc/sec
 
