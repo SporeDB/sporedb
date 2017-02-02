@@ -5,7 +5,7 @@ OPT_VERSION=Mdb/version/version.proto=$(BASE_PATH)/db/version
 OPT_DB=Mdb/spore.proto=$(BASE_PATH)/db
 
 install: protoc
-	go get -v -t ./...
+	go get -t ./...
 
 protoc:
 	protoc --go_out=plugins=grpc,$(OPT_VERSION),$(OPT_DB):. db/api/*.proto

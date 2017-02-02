@@ -102,6 +102,7 @@ func TestEd25519_AddGetPublic(t *testing.T) {
 	// Test overwrite existing key
 	require.Nil(t, k.AddPublic("a", TrustLOW, expected))
 	got, trust, err = k.GetPublic("a")
+	require.Nil(t, err)
 	require.Exactly(t, expected, got)
 	require.Exactly(t, TrustLOW, trust)
 
