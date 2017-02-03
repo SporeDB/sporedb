@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/SporeDB/sporedb/db/drivers/rocksdb"
+	"gitlab.com/SporeDB/sporedb/myc/sec"
 )
 
 func getTestingDB(t *testing.T) (db *DB, done func()) {
@@ -17,7 +18,10 @@ func getTestingDB(t *testing.T) (db *DB, done func()) {
 	store, err := rocksdb.New(path)
 	require.Nil(t, err)
 
-	db = NewDB(store, "test")
+	keyRing := sec.NewKeyRingEd25519()
+	_ = keyRing.CreatePrivate("password")
+
+	db = NewDB(store, "test", keyRing)
 	require.Nil(t, db.AddPolicy(NonePolicy))
 
 	done = func() {
@@ -25,6 +29,16 @@ func getTestingDB(t *testing.T) (db *DB, done func()) {
 		_ = os.RemoveAll(path)
 	}
 	return
+}
+
+func TestHashSpore(t *testing.T) {
+	db, done := getTestingDB(t)
+	defer done()
+
+	s := NewSpore()
+	s.SetTimeout(time.Minute)
+	require.Exactly(t, db.HashSpore(s), db.HashSpore(s))
+	require.NotEqual(t, db.HashSpore(s), db.HashSpore(NewSpore()))
 }
 
 func TestDeadlineToDuration(t *testing.T) {

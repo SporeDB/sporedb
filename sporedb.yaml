@@ -1,4 +1,5 @@
 identity: test
+keyring: keyring.pem
 
 db:
   path: .db

@@ -90,9 +90,15 @@ func (db *DB) Endorse(s *Spore) error {
 }
 
 func (db *DB) executeEndorsement(s *Spore) {
+	signature, err := db.KeyRing.Sign(db.HashSpore(s))
+	if err != nil {
+		return // TODO log signature error
+	}
+
 	e := &Endorsement{
-		Emitter: db.Identity,
-		Uuid:    s.Uuid,
+		Uuid:      s.Uuid,
+		Emitter:   db.Identity,
+		Signature: signature,
 	}
 
 	db.Messages <- e // Broadcast our endorsement for this spore
@@ -120,8 +126,8 @@ func (db *DB) executeEndorsement(s *Spore) {
 
 // AddEndorsement registers the incoming endorsement.
 func (db *DB) AddEndorsement(e *Endorsement) {
-	addEndorsementMap(e, db.waiting, &db.waitingMutex)
-	trigger := addEndorsementMap(e, db.staging, &db.stagingMutex)
+	db.addEndorsementMap(e, db.waiting, &db.waitingMutex)
+	trigger := db.addEndorsementMap(e, db.staging, &db.stagingMutex)
 
 	if trigger == nil {
 		return
@@ -139,7 +145,7 @@ func (db *DB) AddEndorsement(e *Endorsement) {
 	}
 }
 
-func addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu sync.Locker) *dbTrigger {
+func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu sync.Locker) *dbTrigger {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -156,7 +162,11 @@ func addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu sync.Locker)
 		}
 	}
 
-	// TODO check crypto
+	hash := db.HashSpore(trigger.spore)
+	err := db.KeyRing.Verify(e.Emitter, hash, e.Signature)
+	if err != nil {
+		return nil // TODO log verification error
+	}
 
 	trigger.endorsements = append(trigger.endorsements, e)
 	return trigger

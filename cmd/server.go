@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 
@@ -12,16 +13,24 @@ import (
 	"gitlab.com/SporeDB/sporedb/db/drivers/rocksdb"
 	endpoint "gitlab.com/SporeDB/sporedb/db/server"
 	"gitlab.com/SporeDB/sporedb/myc"
+	"gitlab.com/SporeDB/sporedb/myc/sec"
 )
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Run a SporeDB node",
 	Run: func(cmd *cobra.Command, args []string) {
+		rawKeyRing, err := ioutil.ReadFile(viper.GetString("keyring"))
+		check(err)
+
+		keyRing := sec.NewKeyRingEd25519()
+		check(keyRing.UnmarshalBinary(rawKeyRing))
+		check(keyRing.UnlockPrivate(getPassword()))
+
 		store, err := rocksdb.New(viper.GetString("db.path"))
 		check(err)
 
-		database := db.NewDB(store, viper.GetString("identity"))
+		database := db.NewDB(store, viper.GetString("identity"), keyRing)
 		loadPolicies(database)
 
 		srv := &endpoint.Server{

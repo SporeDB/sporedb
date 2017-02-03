@@ -1,20 +1,24 @@
 package db
 
 import (
+	"crypto/sha512"
 	"fmt"
 	"regexp"
 	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	lru "github.com/hashicorp/golang-lru"
 
 	"gitlab.com/SporeDB/sporedb/db/version"
+	"gitlab.com/SporeDB/sporedb/myc/sec"
 )
 
 // DB is the main structure for database management of a node.
 type DB struct {
 	Store    Store
 	Identity string
+	KeyRing  sec.KeyRing
 	Messages chan proto.Message
 
 	// Policy management
@@ -26,6 +30,7 @@ type DB struct {
 	stagingMutex sync.RWMutex
 	waiting      map[string]*dbTrigger
 	waitingMutex sync.RWMutex
+	cache        *lru.Cache
 	gc           chan *Spore
 }
 
@@ -36,15 +41,18 @@ type dbTrigger struct {
 }
 
 // NewDB instanciates a new database with clean initialization.
-func NewDB(s Store, identity string) *DB {
+func NewDB(s Store, identity string, keyring sec.KeyRing) *DB {
+	c, _ := lru.New(32)
 	return &DB{
 		Store:       s,
 		Identity:    identity,
+		KeyRing:     keyring,
 		Messages:    make(chan proto.Message, 16),
 		policies:    make(map[string]*Policy),
 		policiesReg: make(map[string][]*regexp.Regexp),
 		staging:     make(map[string]*dbTrigger),
 		waiting:     make(map[string]*dbTrigger),
+		cache:       c,
 		gc:          make(chan *Spore),
 	}
 }
@@ -133,4 +141,19 @@ func (db *DB) Apply(s *Spore) error {
 
 	fmt.Println("Applying transaction", s.Uuid)
 	return db.Store.SetBatch(keys, values, versions)
+}
+
+// HashSpore process one spore's hash.
+// It stores and caches the value for efficient computation.
+func (db *DB) HashSpore(s *Spore) []byte {
+	hash, ok := db.cache.Get(s.Uuid)
+	if ok {
+		return hash.([]byte)
+	}
+
+	message, _ := proto.Marshal(s)
+	newHash := sha512.Sum512(message)
+
+	go db.cache.Add(s.Uuid, newHash[:])
+	return newHash[:]
 }
