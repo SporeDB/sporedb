@@ -21,7 +21,7 @@ message Policy {
 }
 
 message Endorser {
-	bytes certificate = 1;
+	bytes public = 1;
 	string comment = 2;
 }
 

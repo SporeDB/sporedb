@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 
@@ -284,6 +285,48 @@ func (k *KeyRingEd25519) Verify(from string, cleartext, signature []byte) error 
 	return nil
 }
 
+// Export exports a public key to a PEM block.
+func (k *KeyRingEd25519) Export(identity string) ([]byte, error) {
+	k.mutex.RLock()
+	defer k.mutex.RUnlock()
+
+	_, ok := k.keys[identity]
+	if !ok {
+		return nil, &ErrUnknownIdentity{I: identity}
+	}
+
+	return k.exportUnsafe(identity)
+}
+
+func (k *KeyRingEd25519) exportUnsafe(identity string) ([]byte, error) {
+	key := k.keys[identity]
+
+	// Ensure self public key consistency.
+	if identity == "" {
+		key.Public, _, _ = k.GetPublic("")
+	}
+
+	bytes, err := json.Marshal(key)
+	if err != nil {
+		return nil, err
+	}
+
+	b := &pem.Block{
+		Type: pemPublicType,
+		Headers: map[string]string{
+			"identity": key.identity,
+			"trust":    fmt.Sprint(key.trust),
+		},
+		Bytes: bytes,
+	}
+
+	if key.identity == "" {
+		b.Headers = map[string]string{}
+	}
+
+	return pem.EncodeToMemory(b), nil
+}
+
 // MarshalBinary returns a PEM-armored version of this KeyRing.
 func (k *KeyRingEd25519) MarshalBinary() ([]byte, error) {
 	k.mutex.RLock()
@@ -291,73 +334,71 @@ func (k *KeyRingEd25519) MarshalBinary() ([]byte, error) {
 
 	buf := pem.EncodeToMemory(k.armoredSecret)
 
-	for _, key := range k.keys {
-		bytes, err := json.Marshal(key)
+	for identity := range k.keys {
+		raw, err := k.exportUnsafe(identity)
 		if err != nil {
 			return nil, err
 		}
 
-		b := &pem.Block{
-			Type: pemPublicType,
-			Headers: map[string]string{
-				"identity": key.identity,
-				"trust":    fmt.Sprint(key.trust),
-			},
-			Bytes: bytes,
-		}
-
-		if key.identity == "" {
-			b.Headers = map[string]string{
-				"self": "1",
-			}
-		}
-
-		raw := pem.EncodeToMemory(b)
 		buf = append(buf, raw...)
 	}
 
 	return buf, nil
 }
 
+// Import imports a PEM block to the keyring.
+//
+// This function is thread-safe and supports private / self imports.
+func (k *KeyRingEd25519) Import(data []byte) error {
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
+
+	_, err := k.importUnsafe(data)
+	return err
+}
+
+func (k *KeyRingEd25519) importUnsafe(data []byte) (remaining []byte, err error) {
+	block, remaining := pem.Decode(data)
+
+	if block == nil {
+		err = io.EOF
+		return
+	}
+
+	if block.Type == pemPrivateType {
+		k.armoredSecret = block
+	} else if block.Type == pemPublicType {
+		lvl, _ := strconv.ParseUint(block.Headers["trust"], 10, 8) // error is OK (0 means TrustNONE)
+		key := &KeyEd25519{
+			identity: block.Headers["identity"],
+			trust:    TrustLevel(lvl),
+		}
+
+		err = json.Unmarshal(block.Bytes, key)
+		if err != nil {
+			return
+		}
+
+		if block.Headers["identity"] == "" {
+			k.keys[""].Signatures = key.Signatures
+			return
+		}
+
+		k.keys[key.identity] = key
+	}
+
+	return
+}
+
 // UnmarshalBinary rebuilds a KeyRing from its PEM-armored version.
 // - It may not return an error if a parse error is encountered ;
 // - NewKeyRingEd25519 must be called before to instantiate the KeyRing.
 func (k *KeyRingEd25519) UnmarshalBinary(data []byte) error {
-	var block *pem.Block
+	var err error
 	buffer := data
 
-	for len(buffer) > 0 {
-		block, buffer = pem.Decode(buffer)
-
-		if block == nil {
-			break
-		}
-
-		if block.Type == pemPrivateType {
-			k.armoredSecret = block
-			continue
-		}
-
-		if block.Type == pemPublicType {
-			if block.Headers["self"] == "1" {
-				_ = json.Unmarshal(block.Bytes, k.keys[""])
-				continue
-			}
-
-			if block.Headers["identity"] == "" {
-				continue
-			}
-
-			lvl, _ := strconv.ParseUint(block.Headers["trust"], 10, 8) // error is OK (0 means TrustNONE)
-
-			key := &KeyEd25519{
-				identity: block.Headers["identity"],
-				trust:    TrustLevel(lvl),
-			}
-			_ = json.Unmarshal(block.Bytes, key)
-
-			k.keys[key.identity] = key
-		}
+	for len(buffer) > 0 && err != io.EOF {
+		buffer, err = k.importUnsafe(buffer)
 	}
 
 	// Populate signedBy slices

@@ -90,23 +90,37 @@ func (db *DB) Endorse(s *Spore) error {
 }
 
 func (db *DB) executeEndorsement(s *Spore) {
-	signature, err := db.KeyRing.Sign(db.HashSpore(s))
-	if err != nil {
-		return // TODO log signature error
-	}
-
-	e := &Endorsement{
-		Uuid:      s.Uuid,
-		Emitter:   db.Identity,
-		Signature: signature,
-	}
-
-	db.Messages <- e // Broadcast our endorsement for this spore
-
-	// Is the policy only requires one endorsement, bypass staging list
-	if db.policies[s.Policy].Quorum <= 1 {
+	policy := db.policies[s.Policy]
+	if policy.Quorum == 0 {
 		_ = db.Apply(s)
 		return
+	}
+
+	pub, _, _ := db.KeyRing.GetPublic("")
+	endorser := policy.pubToEndorser(pub)
+	var endorsements []*Endorsement
+
+	if endorser != nil {
+		signature, err := db.KeyRing.Sign(db.HashSpore(s))
+		if err != nil {
+			return // TODO log signature error
+		}
+
+		e := &Endorsement{
+			Uuid:      s.Uuid,
+			Emitter:   db.Identity,
+			Signature: signature,
+		}
+
+		db.Messages <- e // Broadcast our endorsement for this spore
+
+		// Is the policy only requires one endorsement, bypass staging list
+		if db.policies[s.Policy].Quorum == 1 {
+			_ = db.Apply(s)
+			return
+		}
+
+		endorsements = []*Endorsement{e}
 	}
 
 	db.stagingMutex.Lock()
@@ -120,7 +134,7 @@ func (db *DB) executeEndorsement(s *Spore) {
 	db.staging[s.Uuid] = &dbTrigger{
 		timer:        timer,
 		spore:        s,
-		endorsements: []*Endorsement{e},
+		endorsements: endorsements,
 	}
 }
 
@@ -162,10 +176,20 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 		}
 	}
 
-	hash := db.HashSpore(trigger.spore)
-	err := db.KeyRing.Verify(e.Emitter, hash, e.Signature)
+	// Known endorser?
+	pub, _, err := db.KeyRing.GetPublic(e.Emitter)
 	if err != nil {
-		return nil // TODO log verification error
+		return nil
+	}
+
+	// Allowed endorser?
+	if db.policies[trigger.spore.Policy].pubToEndorser(pub) == nil {
+		return nil
+	}
+
+	// Well-formed signature?
+	if db.KeyRing.Verify(e.Emitter, db.HashSpore(trigger.spore), e.Signature) != nil {
+		return nil
 	}
 
 	trigger.endorsements = append(trigger.endorsements, e)

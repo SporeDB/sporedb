@@ -32,27 +32,42 @@ const (
 	pemCipher      = x509.PEMCipherAES256
 )
 
-// KeyRing shall store private and public keys while providing cryptographic functions.
-type KeyRing interface {
-	// Keys management functions
+// PrivateKeyHolder shall be designed to safely keep one private key.
+type PrivateKeyHolder interface {
 	Locked() bool
 	UnlockPrivate(password string) error
 	CreatePrivate(password string) error
+	Sign(cleartext []byte) (signature []byte, err error)
+}
+
+// PublicKeysHolder shall be designed to keep several public keys and associated signatures.
+type PublicKeysHolder interface {
 	AddPublic(identity string, trust TrustLevel, data []byte) error
 	GetPublic(identity string) (data []byte, trust TrustLevel, err error)
 	RemovePublic(identity string)
-
-	// Keys signature functions
 	GetSignatures(identity string) map[string]*Signature
 	AddSignature(identity, from string, signature *Signature) error
-
-	// Cryptographic functions
-	Sign(cleartext []byte) (signature []byte, err error)
 	Verify(from string, cleartext, signature []byte) (err error)
+}
 
-	// Store functions
+// Exporter shall export a particular credential or a whole set.
+type Exporter interface {
 	encoding.BinaryMarshaler
+	Export(identity string) ([]byte, error)
+}
+
+// Importer shall import a particular credential or a whole set.
+type Importer interface {
 	encoding.BinaryUnmarshaler
+	Import(data []byte) error
+}
+
+// KeyRing shall store private and public keys while providing cryptographic functions.
+type KeyRing interface {
+	PrivateKeyHolder
+	PublicKeysHolder
+	Exporter
+	Importer
 }
 
 // Signature represents a local or third-party public key's signature.

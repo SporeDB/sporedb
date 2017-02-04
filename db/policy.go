@@ -1,6 +1,7 @@
 package db
 
 import (
+	"bytes"
 	"errors"
 	"regexp"
 )
@@ -75,6 +76,20 @@ func (p *Policy) compileRegexes() (r []*regexp.Regexp, err error) {
 		}
 	}
 	return
+}
+
+func (p *Policy) pubToEndorser(pub []byte) *Endorser {
+	if p == nil {
+		return nil
+	}
+
+	for _, e := range p.Endorsers {
+		if bytes.Equal(e.Public, pub) {
+			return e
+		}
+	}
+
+	return nil
 }
 
 func (s *OSpec) checkOp(o *Operation) error {

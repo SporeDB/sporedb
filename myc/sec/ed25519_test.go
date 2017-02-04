@@ -227,6 +227,18 @@ func TestEd25519_AddGetSignature(t *testing.T) {
 	require.NotNil(t, signatures["k0"])
 }
 
+func TestEd25519_Export(t *testing.T) {
+	k := NewKeyRingEd25519()
+	_ = k.CreatePrivate("password")
+
+	data, err := k.Export("")
+	require.Nil(t, err)
+	require.True(t, strings.HasPrefix(string(data), "-----BEGIN "))
+
+	_, err = k.Export("unknown")
+	require.NotNil(t, err)
+}
+
 func TestEd25519_Marshal(t *testing.T) {
 	k0 := NewKeyRingEd25519()
 	k0.secret = getTestKeyPairEd25519("sec", 0)
@@ -247,22 +259,21 @@ func TestEd25519_Marshal(t *testing.T) {
 	require.True(t, strings.HasPrefix(string(data), "-----BEGIN "))
 }
 
-var armoredTestKeyRingEd25519 = `-----BEGIN SPOREDB PRIVATE KEY-----
+var armoredTestKeyRingEd25519 = []string{
+	`-----BEGIN SPOREDB PRIVATE KEY-----
 Proc-Type: 4,ENCRYPTED
 DEK-Info: AES-256-CBC,1f647efb1ac2e37a5324faafd36d1db4
 
 0w2QZhOnpMbk2PrxyjwiAkF0wz/mukhi/Q5b/0DRh7/Z4s+en/lSkGdNs4gB9PjH
 3l9VO0YG1CmD5XlBcTGeehSeHEhaXsIBtppM9tp8ZEI=
 -----END SPOREDB PRIVATE KEY-----
------BEGIN SPOREDB PUBLIC KEY-----
-self: 1
-
+`, `-----BEGIN SPOREDB PUBLIC KEY-----
 eyJQdWJsaWMiOm51bGwsIlNpZ25hdHVyZXMiOnsiazAiOnsiRGF0YSI6IkVDWTdC
 Nm5OZTE5WFBrUXZVYzRVSVlML0NETkpEdkMrZzVsSDlidHEwYjYxUUZkK0ZjUnhz
 Z3FLMGVoL2FXNnBrNG8zMVBlVWowdXVwWXNwSUkwVUFBPT0iLCJUcnVzdCI6Mn19
 fQ==
 -----END SPOREDB PUBLIC KEY-----
------BEGIN SPOREDB PUBLIC KEY-----
+`, `-----BEGIN SPOREDB PUBLIC KEY-----
 identity: k0
 trust: 2
 
@@ -271,18 +282,34 @@ OWh3YTFvPSIsIlNpZ25hdHVyZXMiOnsiazIiOnsiRGF0YSI6IlhhcmJHNlNoSlFX
 ZlpwMmZQVkFueGpiOUFkMk5PUldWUE84Q1pNN2I0NEFPTDhCZmJIWDBwSnBENGhQ
 QjFtS3ZqVUNpS3V6OFFXNjdMc3RrT1RVVEJRPT0iLCJUcnVzdCI6MX19fQ==
 -----END SPOREDB PUBLIC KEY-----
------BEGIN SPOREDB PUBLIC KEY-----
+`, `-----BEGIN SPOREDB PUBLIC KEY-----
+-----END SPOREDB PUBLIC KEY-----
+`, `-----BEGIN SPOREDB PUBLIC KEY-----
 identity: k2
 trust: 0
 
 eyJQdWJsaWMiOiJkb3VkdDR2Y043bUtiK21taGErRm96b285YXczMU1XdXBQRW9n
 Zm5STmxBPSIsIlNpZ25hdHVyZXMiOnt9fQ==
 -----END SPOREDB PUBLIC KEY-----
-`
+`}
+
+var armoredTestKeyRingEd25519Joined = strings.Join(armoredTestKeyRingEd25519, "")
+
+func TestEd25519_Import(t *testing.T) {
+	k := NewKeyRingEd25519()
+
+	require.Nil(t, k.Import([]byte(armoredTestKeyRingEd25519[0])), "should import private key")
+	require.Nil(t, k.Import([]byte(armoredTestKeyRingEd25519[1])), "should import public key")
+	require.Nil(t, k.Import([]byte(armoredTestKeyRingEd25519[2])), "should import third-party key")
+	require.NotNil(t, k.Import([]byte(armoredTestKeyRingEd25519[3])), "should return an error for invalid PEM data")
+	require.NotNil(t, k.Import([]byte("TEST")), "should return an error for invalid PEM data")
+
+	// TestEd25519_Unmarshal shall ensure advanced tests for import
+}
 
 func TestEd25519_Unmarshal(t *testing.T) {
 	k := NewKeyRingEd25519()
-	require.Nil(t, k.UnmarshalBinary([]byte(armoredTestKeyRingEd25519)))
+	require.Nil(t, k.UnmarshalBinary([]byte(armoredTestKeyRingEd25519Joined)))
 
 	require.Nil(t, k.UnlockPrivate("password"), "should retrieve correct password")
 
@@ -302,7 +329,7 @@ func TestEd25519_Unmarshal(t *testing.T) {
 
 func TestEd25519_RemovePublic(t *testing.T) {
 	k := NewKeyRingEd25519()
-	_ = k.UnmarshalBinary([]byte(armoredTestKeyRingEd25519))
+	_ = k.UnmarshalBinary([]byte(armoredTestKeyRingEd25519Joined))
 
 	k.RemovePublic("")
 	k.RemovePublic("k3")
