@@ -59,7 +59,7 @@ type Exporter interface {
 // Importer shall import a particular credential or a whole set.
 type Importer interface {
 	encoding.BinaryUnmarshaler
-	Import(data []byte) error
+	Import(data []byte, identity string, trust TrustLevel) error
 }
 
 // KeyRing shall store private and public keys while providing cryptographic functions.

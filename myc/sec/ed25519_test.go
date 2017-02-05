@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+	"io"
 	"strings"
 	"testing"
 
@@ -291,20 +292,35 @@ trust: 0
 eyJQdWJsaWMiOiJkb3VkdDR2Y043bUtiK21taGErRm96b285YXczMU1XdXBQRW9n
 Zm5STmxBPSIsIlNpZ25hdHVyZXMiOnt9fQ==
 -----END SPOREDB PUBLIC KEY-----
-`}
+`, `INVALID`}
 
 var armoredTestKeyRingEd25519Joined = strings.Join(armoredTestKeyRingEd25519, "")
 
 func TestEd25519_Import(t *testing.T) {
-	k := NewKeyRingEd25519()
+	type tc struct {
+		name     string
+		data     int
+		identity string
+		trust    TrustLevel
+		err      error
+	}
 
-	require.Nil(t, k.Import([]byte(armoredTestKeyRingEd25519[0])), "should import private key")
-	require.Nil(t, k.Import([]byte(armoredTestKeyRingEd25519[1])), "should import public key")
-	require.Nil(t, k.Import([]byte(armoredTestKeyRingEd25519[2])), "should import third-party key")
-	require.NotNil(t, k.Import([]byte(armoredTestKeyRingEd25519[3])), "should return an error for invalid PEM data")
-	require.NotNil(t, k.Import([]byte("TEST")), "should return an error for invalid PEM data")
+	cases := []*tc{
+		{"locally exported", 1, "k0", 1, nil},
+		{"locally exported missing identity", 1, "", 1, ErrInvalidIdentity},
+		{"third-party exported", 2, "k0", 1, nil},
+		{"third-party exported wrong identity", 2, "k1", 1, ErrInvalidIdentity},
+		{"invalid PEM", 5, "k0", 1, io.EOF},
+		{"invalid JSON", 3, "k0", 1, ErrInvalidSignature},
+		{"private", 0, "k0", 1, ErrInvalidIdentity},
+	}
 
-	// TestEd25519_Unmarshal shall ensure advanced tests for import
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			k := NewKeyRingEd25519()
+			require.Exactly(t, c.err, k.Import([]byte(armoredTestKeyRingEd25519[c.data]), c.identity, c.trust))
+		})
+	}
 }
 
 func TestEd25519_Unmarshal(t *testing.T) {

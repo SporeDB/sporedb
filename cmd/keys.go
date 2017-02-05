@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -27,6 +28,12 @@ func getKeyRing() sec.KeyRing {
 	return keyRing
 }
 
+func saveKeyRing(keyRing sec.KeyRing) {
+	data, err := keyRing.MarshalBinary()
+	check(err)
+	check(ioutil.WriteFile(viper.GetString("keyring"), data, 0600))
+}
+
 var keysCmd = &cobra.Command{
 	Use:   "keys",
 	Short: "Manage signature keys",
@@ -41,9 +48,7 @@ var keysInitCmd = &cobra.Command{
 		check(keyRing.CreatePrivate(getPassword()))
 
 		// Save to disk
-		data, err := keyRing.MarshalBinary()
-		check(err)
-		check(ioutil.WriteFile(viper.GetString("keyring"), data, 0600))
+		saveKeyRing(keyRing)
 
 		// Print confirmation
 		pub, _, _ := keyRing.GetPublic("")
@@ -66,16 +71,47 @@ var keysExportCmd = &cobra.Command{
 	},
 }
 
+var importIdentity *string
+var importTrust *string
+
 var keysImportCmd = &cobra.Command{
 	Use:   "import",
 	Short: "Import a public key to the keyring",
 	Run: func(cmd *cobra.Command, args []string) {
-		check(errors.New("not yet implemented"))
+		identity := *importIdentity
+		if identity == "" {
+			check(errors.New("please provide identity flag"))
+		}
+
+		var lvl sec.TrustLevel
+		switch *importTrust {
+		case "none":
+			lvl = sec.TrustNONE
+		case "low":
+			lvl = sec.TrustLOW
+		case "high":
+			lvl = sec.TrustHIGH
+		case "ultimate":
+			lvl = sec.TrustULTIMATE
+		default:
+			check(errors.New("unrecognized trust level"))
+		}
+
+		keyRing := getKeyRing()
+
+		data, err := ioutil.ReadAll(os.Stdin)
+		check(err)
+		check(keyRing.Import(data, identity, lvl))
+
+		saveKeyRing(keyRing)
+
+		pub, _, _ := keyRing.GetPublic(identity)
+		fmt.Printf("Imported new key for identity %s (%x)\n", identity, pub)
 	},
 }
 
 var keysRemoveCmd = &cobra.Command{
-	Use:   "rm",
+	Use:   "rm [identity]",
 	Short: "Remove a public key from the keyring",
 	Run: func(cmd *cobra.Command, args []string) {
 		check(errors.New("not yet implemented"))
@@ -83,7 +119,7 @@ var keysRemoveCmd = &cobra.Command{
 }
 
 var keysListCmd = &cobra.Command{
-	Use:   "ls",
+	Use:   "ls [identity]",
 	Short: "List public keys from the keyring",
 	Run: func(cmd *cobra.Command, args []string) {
 		check(errors.New("not yet implemented"))
@@ -93,4 +129,7 @@ var keysListCmd = &cobra.Command{
 func init() {
 	keysCmd.AddCommand(keysInitCmd, keysExportCmd, keysImportCmd, keysRemoveCmd, keysListCmd)
 	RootCmd.AddCommand(keysCmd)
+
+	importIdentity = keysImportCmd.Flags().StringP("identity", "i", "", "public key identity")
+	importTrust = keysImportCmd.Flags().StringP("trust", "t", "low", "public key local trust (none, low, high, ultimate)")
 }

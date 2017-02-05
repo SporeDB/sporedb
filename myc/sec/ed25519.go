@@ -346,18 +346,28 @@ func (k *KeyRingEd25519) MarshalBinary() ([]byte, error) {
 	return buf, nil
 }
 
-// Import imports a PEM block to the keyring.
+// Import imports a public PEM block to the keyring.
+// Identity must be defined, and third-party signatures are verified afterwards.
 //
-// This function is thread-safe and supports private / self imports.
-func (k *KeyRingEd25519) Import(data []byte) error {
+// This function accepts following results of function Export:
+// - Local exports (without any headears)
+// - Third-party exports (with "identity" header set)
+//   * If the provided identity is different that the "identity" header, an error is returned
+//
+// This function is thread-safe.
+func (k *KeyRingEd25519) Import(data []byte, identity string, trust TrustLevel) error {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
-	_, err := k.importUnsafe(data)
+	if identity == "" {
+		return ErrInvalidIdentity
+	}
+
+	_, err := k.importUnsafe(data, identity, trust)
 	return err
 }
 
-func (k *KeyRingEd25519) importUnsafe(data []byte) (remaining []byte, err error) {
+func (k *KeyRingEd25519) importUnsafe(data []byte, identity string, trust TrustLevel) (remaining []byte, err error) {
 	block, remaining := pem.Decode(data)
 
 	if block == nil {
@@ -366,9 +376,14 @@ func (k *KeyRingEd25519) importUnsafe(data []byte) (remaining []byte, err error)
 	}
 
 	if block.Type == pemPrivateType {
+		if identity != "" { // Avoid private key override when importing unsafely.
+			err = ErrInvalidIdentity
+			return
+		}
 		k.armoredSecret = block
 	} else if block.Type == pemPublicType {
 		lvl, _ := strconv.ParseUint(block.Headers["trust"], 10, 8) // error is OK (0 means TrustNONE)
+
 		key := &KeyEd25519{
 			identity: block.Headers["identity"],
 			trust:    TrustLevel(lvl),
@@ -376,10 +391,21 @@ func (k *KeyRingEd25519) importUnsafe(data []byte) (remaining []byte, err error)
 
 		err = json.Unmarshal(block.Bytes, key)
 		if err != nil {
+			err = ErrInvalidSignature
 			return
 		}
 
-		if block.Headers["identity"] == "" {
+		if identity != "" {
+			if key.identity != "" && key.identity != identity {
+				err = ErrInvalidIdentity
+				return
+			}
+
+			key.identity = identity
+			key.trust = trust
+		}
+
+		if key.identity == "" {
 			k.keys[""].Signatures = key.Signatures
 			return
 		}
@@ -398,7 +424,7 @@ func (k *KeyRingEd25519) UnmarshalBinary(data []byte) error {
 	buffer := data
 
 	for len(buffer) > 0 && err != io.EOF {
-		buffer, err = k.importUnsafe(buffer)
+		buffer, err = k.importUnsafe(buffer, "", 0)
 	}
 
 	// Populate signedBy slices
