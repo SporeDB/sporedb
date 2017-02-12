@@ -109,12 +109,6 @@ func TestEd25519_AddGetPublic(t *testing.T) {
 
 	// Test invalid identity
 	require.Exactly(t, ErrInvalidIdentity, k.AddPublic("", TrustHIGH, getTestKeyPairEd25519("pub", 0)))
-
-	// Test self identity
-	got, trust, err = k.GetPublic("")
-	require.Exactly(t, getTestKeyPairEd25519("pub", 0), got)
-	require.Exactly(t, TrustULTIMATE, trust)
-	require.Nil(t, err)
 }
 
 func TestEd25519_SignVerify(t *testing.T) {
@@ -243,12 +237,14 @@ func TestEd25519_Export(t *testing.T) {
 func TestEd25519_Marshal(t *testing.T) {
 	k0 := NewKeyRingEd25519()
 	k0.secret = getTestKeyPairEd25519("sec", 0)
+	k0.keys[""].Public = getTestKeyPairEd25519("pub", 0)
 	_ = k0.AddPublic("k1", TrustHIGH, getTestKeyPairEd25519("pub", 1))
 	_ = k0.AddPublic("k2", TrustLOW, getTestKeyPairEd25519("pub", 2))
 	_ = k0.AddSignature("k2", "", nil)
 
 	k1 := NewKeyRingEd25519()
 	k1.secret = getTestKeyPairEd25519("sec", 1)
+	k1.keys[""].Public = getTestKeyPairEd25519("pub", 1)
 	k1.armoredSecret, _ = x509.EncryptPEMBlock(rand.Reader, pemPrivateType, k1.secret, []byte("password"), pemCipher)
 	_ = k1.AddPublic("k0", TrustHIGH, getTestKeyPairEd25519("pub", 0))
 	_ = k1.AddPublic("k2", TrustNONE, getTestKeyPairEd25519("pub", 2))
@@ -263,20 +259,20 @@ func TestEd25519_Marshal(t *testing.T) {
 var armoredTestKeyRingEd25519 = []string{
 	`-----BEGIN SPOREDB PRIVATE KEY-----
 Proc-Type: 4,ENCRYPTED
-DEK-Info: AES-256-CBC,1f647efb1ac2e37a5324faafd36d1db4
+DEK-Info: AES-256-CBC,5403fd3d877138b7d91b0c4b7d6648ab
 
-0w2QZhOnpMbk2PrxyjwiAkF0wz/mukhi/Q5b/0DRh7/Z4s+en/lSkGdNs4gB9PjH
-3l9VO0YG1CmD5XlBcTGeehSeHEhaXsIBtppM9tp8ZEI=
+xo/moKPxYuhgNBxauLmL+jlJllm8x09rhNXpDFUrmipRNdkUBVsavzvXe44YgLXK
+feMYN4wG8mtI72/1z/cQMhMianCLfsh2tnQxiBvsPy0=
 -----END SPOREDB PRIVATE KEY-----
 `, `-----BEGIN SPOREDB PUBLIC KEY-----
-eyJQdWJsaWMiOm51bGwsIlNpZ25hdHVyZXMiOnsiazAiOnsiRGF0YSI6IkVDWTdC
-Nm5OZTE5WFBrUXZVYzRVSVlML0NETkpEdkMrZzVsSDlidHEwYjYxUUZkK0ZjUnhz
-Z3FLMGVoL2FXNnBrNG8zMVBlVWowdXVwWXNwSUkwVUFBPT0iLCJUcnVzdCI6Mn19
-fQ==
+eyJQdWJsaWMiOiJjcXpEblRybXdzYytLS2lNRm1KenlYRTRvelMwdzE2ekxkM1g2
+VjFDZnJnPSIsIlNpZ25hdHVyZXMiOnsiazAiOnsiRGF0YSI6IkVDWTdCNm5OZTE5
+WFBrUXZVYzRVSVlML0NETkpEdkMrZzVsSDlidHEwYjYxUUZkK0ZjUnhzZ3FLMGVo
+L2FXNnBrNG8zMVBlVWowdXVwWXNwSUkwVUFBPT0iLCJUcnVzdCI6Mn19fQ==
 -----END SPOREDB PUBLIC KEY-----
 `, `-----BEGIN SPOREDB PUBLIC KEY-----
 identity: k0
-trust: 2
+trust: high
 
 eyJQdWJsaWMiOiJZc1ozcnZzWE9DRW1ucTFla2R4c2ZJaUxwcWlRalMycjhoa0M5
 OWh3YTFvPSIsIlNpZ25hdHVyZXMiOnsiazIiOnsiRGF0YSI6IlhhcmJHNlNoSlFX
@@ -287,7 +283,7 @@ QjFtS3ZqVUNpS3V6OFFXNjdMc3RrT1RVVEJRPT0iLCJUcnVzdCI6MX19fQ==
 -----END SPOREDB PUBLIC KEY-----
 `, `-----BEGIN SPOREDB PUBLIC KEY-----
 identity: k2
-trust: 0
+trust: none
 
 eyJQdWJsaWMiOiJkb3VkdDR2Y043bUtiK21taGErRm96b285YXczMU1XdXBQRW9n
 Zm5STmxBPSIsIlNpZ25hdHVyZXMiOnt9fQ==

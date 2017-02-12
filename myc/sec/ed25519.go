@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"io"
-	"strconv"
+	"sort"
 	"sync"
 
 	"golang.org/x/crypto/ed25519"
@@ -23,6 +21,11 @@ type KeyEd25519 struct {
 	identity string
 	signedBy []*KeyEd25519
 	trust    TrustLevel
+}
+
+// Info shall be used to get basic informations about this key.
+func (k *KeyEd25519) Info() (identity string, data []byte, trust TrustLevel) {
+	return k.identity, k.Public, k.trust
 }
 
 // KeyRingEd25519 is a KeyRing saving data as PEM, and using the Ed25519 high-speed high-security signatures algorithm.
@@ -39,6 +42,7 @@ func NewKeyRingEd25519() *KeyRingEd25519 {
 	return &KeyRingEd25519{
 		keys: map[string]*KeyEd25519{
 			"": &KeyEd25519{
+				trust:      TrustULTIMATE,
 				Signatures: make(map[string]*Signature),
 			},
 		},
@@ -62,7 +66,7 @@ func (k *KeyRingEd25519) UnlockPrivate(password string) (err error) {
 
 // CreatePrivate generates a new Ed25519 private key and its associated PEM-armored block.
 func (k *KeyRingEd25519) CreatePrivate(password string) (err error) {
-	_, k.secret, err = ed25519.GenerateKey(rand.Reader)
+	k.keys[""].Public, k.secret, err = ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return
 	}
@@ -106,6 +110,18 @@ func (k *KeyRingEd25519) AddPublic(identity string, trust TrustLevel, data []byt
 	return
 }
 
+// ListPublic returns every stored public key.
+// The self public key is also included.
+func (k *KeyRingEd25519) ListPublic() []ListedKey {
+	var keys []ListedKey
+	for _, key := range k.keys {
+		keys = append(keys, key)
+	}
+
+	sort.Sort(ByIdentity(keys))
+	return keys
+}
+
 // GetPublic returns the stored public key for the provided identity.
 // Providing the empty identity will return self public key.
 //
@@ -113,17 +129,6 @@ func (k *KeyRingEd25519) AddPublic(identity string, trust TrustLevel, data []byt
 //
 // This function is thread-safe.
 func (k *KeyRingEd25519) GetPublic(identity string) (data []byte, trust TrustLevel, err error) {
-	if identity == "" {
-		if k.Locked() {
-			err = ErrKeyRingLocked
-			return
-		}
-
-		data, _ = hex.DecodeString(fmt.Sprintf("%x", k.secret.Public()))
-		trust = TrustULTIMATE
-		return
-	}
-
 	k.mutex.RLock()
 	defer k.mutex.RUnlock()
 
@@ -164,7 +169,7 @@ func (k *KeyRingEd25519) RemovePublic(identity string) {
 	}
 }
 
-// GetSignatures returns a map of (signer, signatures) for the provided identity.
+// GetSignatures returns a map of (signer, signatures) where the provided identity is the signee.
 // This function is thread-safe.
 func (k *KeyRingEd25519) GetSignatures(identity string) map[string]*Signature {
 	k.mutex.RLock()
@@ -301,11 +306,6 @@ func (k *KeyRingEd25519) Export(identity string) ([]byte, error) {
 func (k *KeyRingEd25519) exportUnsafe(identity string) ([]byte, error) {
 	key := k.keys[identity]
 
-	// Ensure self public key consistency.
-	if identity == "" {
-		key.Public, _, _ = k.GetPublic("")
-	}
-
 	bytes, err := json.Marshal(key)
 	if err != nil {
 		return nil, err
@@ -315,7 +315,7 @@ func (k *KeyRingEd25519) exportUnsafe(identity string) ([]byte, error) {
 		Type: pemPublicType,
 		Headers: map[string]string{
 			"identity": key.identity,
-			"trust":    fmt.Sprint(key.trust),
+			"trust":    key.trust.String(),
 		},
 		Bytes: bytes,
 	}
@@ -382,11 +382,15 @@ func (k *KeyRingEd25519) importUnsafe(data []byte, identity string, trust TrustL
 		}
 		k.armoredSecret = block
 	} else if block.Type == pemPublicType {
-		lvl, _ := strconv.ParseUint(block.Headers["trust"], 10, 8) // error is OK (0 means TrustNONE)
+		lvl, _ := ParseTrust(block.Headers["trust"]) // error is handled by the default lvl value
+		id := block.Headers["identity"]
+		if id == "" {
+			lvl = TrustULTIMATE
+		}
 
 		key := &KeyEd25519{
-			identity: block.Headers["identity"],
-			trust:    TrustLevel(lvl),
+			identity: id,
+			trust:    lvl,
 		}
 
 		err = json.Unmarshal(block.Bytes, key)
@@ -403,11 +407,6 @@ func (k *KeyRingEd25519) importUnsafe(data []byte, identity string, trust TrustL
 
 			key.identity = identity
 			key.trust = trust
-		}
-
-		if key.identity == "" {
-			k.keys[""].Signatures = key.Signatures
-			return
 		}
 
 		k.keys[key.identity] = key
