@@ -25,9 +25,10 @@ func Test_transportTCP(t *testing.T) {
 			_ = n.conn.Close()
 			_ = srv.Close()
 
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			_ = srv.Listen(p, func(nn *Node) {
 				_, _ = nn.conn.Write(b[10:])
+				_ = srv.Close()
 			})
 		})
 	}()
@@ -38,6 +39,9 @@ func Test_transportTCP(t *testing.T) {
 
 	b := []byte("Hello World via TCP Transport")
 	b2 := make([]byte, len(b))
+
+	// Wait a bit for server startup
+	time.Sleep(100 * time.Millisecond)
 
 	n, err := c.Write(b)
 	require.Nil(t, err)
