@@ -1,6 +1,9 @@
 package sec
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Error messages.
 var (
@@ -23,9 +26,10 @@ func (e ErrUnknownIdentity) Error() string {
 // ErrInsufficientTrust is returned when a verification cannot be performed due to a lack of trust in one's public key.
 type ErrInsufficientTrust struct {
 	I string
+	L int
 }
 
 // Error returns error's string value.
 func (e ErrInsufficientTrust) Error() string {
-	return "insufficient trust for identity: " + e.I
+	return fmt.Sprintf("insufficient trust for identity %s (%d/%d)", e.I, e.L, TrustThreshold)
 }

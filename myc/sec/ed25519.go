@@ -198,38 +198,28 @@ func (k *KeyRingEd25519) GetSignatures(identity string) map[string]*Signature {
 func (k *KeyRingEd25519) AddSignature(identity, from string, signature *Signature) error {
 	k.mutex.RLock()
 	key, ok := k.keys[identity]
+	signer := k.keys[from] // Safe, non-nil values shall be verified in k.verifySignature
 	k.mutex.RUnlock()
 
 	if !ok {
 		return &ErrUnknownIdentity{I: identity}
 	}
 
-	var signer *KeyEd25519
-
-	if from == "" { // local signature
+	if from == "" { // emit local signature
 		message := append(key.Public, byte(key.trust))
 		signData, err := k.Sign(message)
 		if err != nil {
 			return err
 		}
 
-		signer = k.keys[""]
 		signature = &Signature{
 			Data:  signData,
 			Trust: key.trust,
 		}
-	} else { // third-party signature
-		message := append(key.Public, byte(signature.Trust))
-		signer, ok = k.keys[from]
-		if !ok {
-			return &ErrUnknownIdentity{I: from}
-		}
-
-		err := k.Verify(from, message, signature.Data)
-		if err != nil {
+	} else { // verify third-party signature
+		if err := k.verifySignature(from, key, signature); err != nil {
 			return err
 		}
-
 	}
 
 	k.mutex.Lock()
@@ -238,6 +228,11 @@ func (k *KeyRingEd25519) AddSignature(identity, from string, signature *Signatur
 	key.signedBy = append(key.signedBy, signer)
 	signer.Signatures[identity] = signature
 	return nil
+}
+
+func (k *KeyRingEd25519) verifySignature(signer string, signee *KeyEd25519, signature *Signature) error {
+	message := append(signee.Public, byte(signature.Trust))
+	return k.Verify(signer, message, signature.Data)
 }
 
 // Sign signs the message with the unlocked private key.
@@ -267,10 +262,42 @@ func (k *KeyRingEd25519) Verify(from string, cleartext, signature []byte) error 
 		return &ErrUnknownIdentity{I: from}
 	}
 
+	err := k.trustedUnsafe(key)
+	if err != nil {
+		return err
+	}
+
+	ok = ed25519.Verify(key.Public, cleartext, signature)
+	if !ok {
+		return ErrInvalidSignature
+	}
+
+	return nil
+}
+
+// Trusted shall return nil if an identity is currently trusted by the keyring.
+//
+// It may returns ErrUnknownIdentity or ErrInsufficientTrust.
+//
+// This function is thread-safe.
+func (k *KeyRingEd25519) Trusted(identity string) error {
+	k.mutex.RLock()
+	defer k.mutex.RUnlock()
+
+	key, ok := k.keys[identity]
+	if !ok {
+		return &ErrUnknownIdentity{I: identity}
+	}
+
+	return k.trustedUnsafe(key)
+}
+
+// TODO : secure this function
+func (k *KeyRingEd25519) trustedUnsafe(key *KeyEd25519) error {
 	lvl := TrustValue[key.trust]
 	for _, signer := range key.signedBy {
 		a := TrustValue[signer.trust]
-		b := TrustValue[signer.Signatures[from].Trust]
+		b := TrustValue[signer.Signatures[key.identity].Trust]
 		if b < a {
 			lvl += b
 		} else {
@@ -279,14 +306,8 @@ func (k *KeyRingEd25519) Verify(from string, cleartext, signature []byte) error 
 	}
 
 	if lvl < TrustThreshold {
-		return &ErrInsufficientTrust{I: from}
+		return &ErrInsufficientTrust{I: key.identity, L: lvl}
 	}
-
-	ok = ed25519.Verify(key.Public, cleartext, signature)
-	if !ok {
-		return ErrInvalidSignature
-	}
-
 	return nil
 }
 
@@ -428,10 +449,13 @@ func (k *KeyRingEd25519) UnmarshalBinary(data []byte) error {
 
 	// Populate signedBy slices
 	for _, key := range k.keys {
-		for signee := range key.Signatures {
+		for signee, signature := range key.Signatures {
 			signeeKey, ok := k.keys[signee]
 			if ok {
-				signeeKey.signedBy = append(signeeKey.signedBy, key)
+				// Check the signature
+				if k.verifySignature(key.identity, signeeKey, signature) == nil {
+					signeeKey.signedBy = append(signeeKey.signedBy, key)
+				} // TODO better handling of dependency tree
 			}
 		}
 	}

@@ -12,11 +12,14 @@ import (
 	"gitlab.com/SporeDB/sporedb/myc/sec"
 )
 
+const strTrustLevel = "none,low,high,ultimate"
+
 func getPassword() string {
 	password := viper.GetString("password")
 	if len(password) == 0 {
 		check(errors.New("Please provide a password through `PASSWORD` environment variable."))
 	}
+
 	return password
 }
 
@@ -114,17 +117,24 @@ var keysListCmd = &cobra.Command{
 		keyRing := getKeyRing()
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Identity", "Trust", "Fingerprint"})
+		table.SetHeader([]string{"Identity", "Trust", "Certified", "Fingerprint"})
 		table.SetRowLine(true)
 		table.SetAutoFormatHeaders(false)
 		table.SetAlignment(tablewriter.ALIGN_LEFT)
 
 		for _, k := range keyRing.ListPublic() {
 			identity, data, trust := k.Info()
+
+			cert := "✔️️ yes"
+			if keyRing.Trusted(identity) != nil {
+				cert = "❌ no"
+			}
+
 			if identity == "" {
 				identity = "<self>"
 			}
-			table.Append([]string{identity, trust.String(), sec.Fingerprint(data)})
+
+			table.Append([]string{identity, trust.String(), cert, sec.Fingerprint(data)})
 		}
 
 		table.Render()
@@ -143,6 +153,12 @@ var keysShowCmd = &cobra.Command{
 
 		signatures := keyRing.GetSignatures(identity)
 
+		status := "Certified"
+		err = keyRing.Trusted(identity)
+		if err != nil {
+			status = fmt.Sprintf("Insufficient trust (%d/%d)", err.(*sec.ErrInsufficientTrust).L, sec.TrustThreshold)
+		}
+
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetAlignment(tablewriter.ALIGN_LEFT)
 		table.SetColWidth(100)
@@ -154,26 +170,68 @@ var keysShowCmd = &cobra.Command{
 		table.Append([]string{"Trust", trust.String()})
 		table.Append([]string{"Fingerprint", sec.Fingerprint(data)})
 		table.Append([]string{"Public key", fmt.Sprintf("%X", data)})
+		table.Append([]string{"Status", status})
 
 		for i, s := range signatures {
+			if i == "" {
+				i = "<self>"
+			}
 			table.Append([]string{"Approved by", fmt.Sprintf("%s (%s)", i, s.Trust)})
+		}
+
+		if len(signatures) == 0 {
+			table.Append([]string{"Approved by", "(nobody)"})
 		}
 
 		table.Render()
 	},
 }
 
+var keysTrustCmd = &cobra.Command{
+	Use:   "trust [id] [" + strTrustLevel + "]",
+	Short: "Update local trust level in specific key",
+	Run: func(cmd *cobra.Command, args []string) {
+		keyRing := getKeyRing()
+		identity := getIdentity(cmd, args)
+		lvl, err := sec.ParseTrust(getArg(cmd, args, 1))
+		check(err)
+
+		data, _, err := keyRing.GetPublic(identity)
+		check(err)
+		check(keyRing.AddPublic(identity, lvl, data))
+		saveKeyRing(keyRing)
+	},
+}
+
+var keysSignCmd = &cobra.Command{
+	Use:   "sign [id]",
+	Short: "Sign an identity with private key according to stored trust level",
+	Run: func(cmd *cobra.Command, args []string) {
+		keyRing := getKeyRing()
+		password := getPassword()
+		identity := getIdentity(cmd, args)
+		check(keyRing.UnlockPrivate(password))
+		check(keyRing.AddSignature(identity, "", nil))
+		saveKeyRing(keyRing)
+	},
+}
+
 func getIdentity(cmd *cobra.Command, args []string) string {
-	if len(args) == 0 || args[0] == "" {
-		_ = cmd.Usage()
-		os.Exit(1)
-	}
-	return args[0]
+	return getArg(cmd, args, 0)
 }
 
 func init() {
-	keysCmd.AddCommand(keysInitCmd, keysExportCmd, keysImportCmd, keysRemoveCmd, keysListCmd, keysShowCmd)
+	keysCmd.AddCommand(
+		keysInitCmd,
+		keysExportCmd,
+		keysImportCmd,
+		keysRemoveCmd,
+		keysListCmd,
+		keysShowCmd,
+		keysTrustCmd,
+		keysSignCmd,
+	)
 	RootCmd.AddCommand(keysCmd)
 
-	importTrust = keysImportCmd.Flags().StringP("trust", "t", "low", "public key local trust (none, low, high, ultimate)")
+	importTrust = keysImportCmd.Flags().StringP("trust", "t", "low", "public key local trust ("+strTrustLevel+")")
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/chzyer/readline"
+	"github.com/spf13/cobra"
 )
 
 func check(err error) {
@@ -34,4 +35,13 @@ func readInt(s string, d int) int {
 			return n
 		}
 	}
+}
+
+func getArg(cmd *cobra.Command, args []string, index int) string {
+	if len(args) <= index || args[index] == "" {
+		_ = cmd.Usage()
+		os.Exit(1)
+	}
+
+	return args[index]
 }

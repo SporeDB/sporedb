@@ -75,6 +75,7 @@ type PublicKeysHolder interface {
 	GetSignatures(identity string) map[string]*Signature
 	AddSignature(identity, from string, signature *Signature) error
 	Verify(from string, cleartext, signature []byte) (err error)
+	Trusted(identity string) error
 }
 
 // Exporter shall export a particular credential or a whole set.
