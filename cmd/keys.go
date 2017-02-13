@@ -17,7 +17,7 @@ const strTrustLevel = "none,low,high,ultimate"
 func getPassword() string {
 	password := viper.GetString("password")
 	if len(password) == 0 {
-		check(errors.New("Please provide a password through `PASSWORD` environment variable."))
+		check(errors.New("please provide a password through `PASSWORD` environment variable"))
 	}
 
 	return password

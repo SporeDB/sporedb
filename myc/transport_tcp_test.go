@@ -41,7 +41,7 @@ func Test_transportTCP(t *testing.T) {
 	b2 := make([]byte, len(b))
 
 	// Wait a bit for server startup
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	n, err := c.Write(b)
 	require.Nil(t, err)
