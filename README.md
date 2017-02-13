@@ -16,7 +16,7 @@ This strong coordination reduces scalability and performance of the global syste
 
 We introduce SporeDB as a way to solve these problems using simple (but powerful) techniques.
 
-## ToDo
+## ToDo
 
 * Recovery after failures
   * Full state-transfer

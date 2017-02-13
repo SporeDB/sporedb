@@ -6,7 +6,7 @@ RUN apt-get update && \
 # Install RocksDB
 
 RUN cd /tmp && \
-  git clone --depth 1 --branch 5.0.fb https://github.com/facebook/rocksdb.git && \
+  git clone --depth 1 --branch 5.1.fb https://github.com/facebook/rocksdb.git && \
   cd rocksdb && \
   PORTABLE=1 make shared_lib && \
   INSTALL_PATH=/usr make install-shared && \
