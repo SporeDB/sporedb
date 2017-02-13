@@ -7,9 +7,17 @@ import "db/version/version.proto";
 message Spore {
 	string uuid = 1;
 	string policy = 2;
-	google.protobuf.Timestamp deadline = 3;
-	map<string, version.V> requirements = 4;
-	repeated Operation operations = 5;
+	string emitter = 3;
+	google.protobuf.Timestamp deadline = 4;
+
+	map<string, version.V> requirements = 5;
+	repeated Operation operations = 6;
+
+	// The signature of the spore is computed on the spore with an empty signature.
+	// signature = signature by emitter ( hash ( marshal ( spore without signature ) ) )
+	//
+	// It is used to check spore's integrity.
+	bytes signature = 10;
 }
 
 message Operation {

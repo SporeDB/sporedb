@@ -17,7 +17,6 @@ message Policy {
 	uint64 max_op_size = 8;
 
 	repeated OSpec specs = 9;
-	bool strict = 10;
 }
 
 message Endorser {

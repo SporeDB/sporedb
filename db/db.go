@@ -151,9 +151,13 @@ func (db *DB) HashSpore(s *Spore) []byte {
 		return hash.([]byte)
 	}
 
-	message, _ := proto.Marshal(s)
-	newHash := sha512.Sum512(message)
+	newHash := hashMessage(s)
+	go db.cache.Add(s.Uuid, newHash)
+	return newHash
+}
 
-	go db.cache.Add(s.Uuid, newHash[:])
-	return newHash[:]
+func hashMessage(message proto.Message) []byte {
+	raw, _ := proto.Marshal(message)
+	hash := sha512.Sum512(raw)
+	return hash[:]
 }

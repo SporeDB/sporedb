@@ -66,15 +66,41 @@ func (db *DB) CanEndorse(s *Spore) error {
 }
 
 // Submit broadcasts the Spore to the Mycelium, then tries to endorse it with current state.
-func (db *DB) Submit(s *Spore) error {
+func (db *DB) Submit(s *Spore) (err error) {
+	// Sign the spore before submission
+	s.Emitter, s.Signature = db.Identity, nil // ensure nil signature before hash
+	s.Signature, err = db.KeyRing.Sign(db.HashSpore(s))
+	if err != nil {
+		return err
+	}
+
 	db.Messages <- s
 	return db.Endorse(s)
+}
+
+// VerifySporeSignature verifies emitter's signature of the given spore.
+// It is passed by value because this function require's spore alteration.
+func (db *DB) VerifySporeSignature(s Spore) error {
+	signature := s.Signature
+	s.Signature = nil
+	hash := hashMessage(&s)
+
+	if s.Emitter == db.Identity {
+		s.Emitter = ""
+	}
+
+	return db.KeyRing.Verify(s.Emitter, hash, signature)
 }
 
 // Endorse tries to endorse a Spore, calling CanEndorse before any operation.
 // It either adds the Spore to the staging list, pending list or discards it.
 func (db *DB) Endorse(s *Spore) error {
-	err := db.CanEndorse(s)
+	err := db.VerifySporeSignature(*s)
+	if err != nil {
+		return err
+	}
+
+	err = db.CanEndorse(s)
 	if err == ErrConflictingWithStaging {
 		db.waitingMutex.Lock()
 		db.waiting[s.Uuid] = &dbTrigger{

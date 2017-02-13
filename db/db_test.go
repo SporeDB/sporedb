@@ -63,6 +63,8 @@ func TestDB_Single_Quorum1(t *testing.T) {
 		Op:   Operation_ADD,
 		Data: []byte("5.42"),
 	}}
+	s.Emitter = db.Identity
+	s.Signature, _ = db.KeyRing.Sign(db.HashSpore(s))
 
 	_ = db.Endorse(s)
 
@@ -98,6 +100,8 @@ func TestDB_Single_Quorum2(t *testing.T) {
 		Op:   Operation_SET,
 		Data: []byte("Hello"),
 	}}
+	a.Emitter = db.Identity
+	a.Signature, _ = db.KeyRing.Sign(db.HashSpore(a))
 
 	b := NewSpore()
 	b.SetTimeout(time.Second)
@@ -106,6 +110,8 @@ func TestDB_Single_Quorum2(t *testing.T) {
 		Op:   Operation_SET,
 		Data: []byte("Hello"),
 	}}
+	b.Emitter = db.Identity
+	b.Signature, _ = db.KeyRing.Sign(db.HashSpore(b))
 
 	c := NewSpore()
 	c.SetTimeout(time.Second)
@@ -114,6 +120,8 @@ func TestDB_Single_Quorum2(t *testing.T) {
 		Op:   Operation_SET,
 		Data: []byte("World"),
 	}}
+	c.Emitter = db.Identity
+	c.Signature, _ = db.KeyRing.Sign(db.HashSpore(c))
 
 	go func() {
 		_ = db.Endorse(a)
