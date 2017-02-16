@@ -9,6 +9,5 @@
       "regex": ".*",
       "max_size": "0"
     }
-  ],
-  "strict": false
+  ]
 }

@@ -29,3 +29,6 @@ test: install
 	@go test -cover $(BASE_PATH)/myc/protocol
 	@go test -cover $(BASE_PATH)/myc/sec
 
+image: install
+	go build -ldflags "-s -w" .
+	docker build -t registry.gitlab.com/sporedb/sporedb .

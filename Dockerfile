@@ -1,29 +1,23 @@
-FROM golang:1.7
+FROM ubuntu:16.10
+ARG builddeps="git autoconf automake libtool curl make g++ unzip"
+ARG rundeps="libsnappy-dev zlib1g-dev libbz2-dev"
 
-RUN apt-get update && \
-  apt-get install -y git autoconf automake libtool curl make g++ unzip libsnappy-dev zlib1g-dev libbz2-dev
 
 # Install RocksDB
 
 RUN cd /tmp && \
+  apt-get update && \
+  apt-get install -y $builddeps $rundeps && \
   git clone --depth 1 --branch 5.1.fb https://github.com/facebook/rocksdb.git && \
   cd rocksdb && \
   PORTABLE=1 make shared_lib && \
   INSTALL_PATH=/usr make install-shared && \
-  rm -rf /tmp/rocksdb
+  rm -rf /tmp/rocksdb && \
+  apt-get remove --purge --auto-remove -y $builddeps
 
-# Install Protoc
+RUN mkdir /sporedb
+WORKDIR /sporedb
 
-RUN cd /tmp && \
-  git clone --branch 3.1.x --depth 1 https://github.com/google/protobuf.git && \
-  cd protobuf && \
-  ./autogen.sh && \
-  ./configure --prefix=/usr && \
-  make && \
-  make install && \
-  go get -u github.com/golang/protobuf/protoc-gen-go && \
-  rm -rf /tmp/protobuf
-
-# Install Gometalinter
-
-RUN go get -u github.com/alecthomas/gometalinter && gometalinter --install
+COPY sporedb /bin/sporedb
+ENTRYPOINT ["sporedb"]
+CMD ["-h"]
