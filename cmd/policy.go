@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strconv"
 
 	"github.com/golang/protobuf/jsonpb"
 	uuid "github.com/satori/go.uuid"
@@ -26,14 +27,49 @@ var policyCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new policy",
 	Run: func(cmd *cobra.Command, args []string) {
+		keyRing := getKeyRing()
 		p := &db.Policy{}
 		p.Uuid = read("Name of the policy", uuid.NewV4().String())
 		p.Comment = read("Comment", "")
-		p.Quorum = uint64(readInt("Quorum", 1))
 		p.Specs = []*db.OSpec{
 			&db.OSpec{Key: &db.OSpec_Regex{Regex: ".*"}},
 		}
 
+		if readBool("Shall this node be considered as an endorser?", true) {
+			data, _, _ := keyRing.GetPublic("")
+			p.Endorsers = append(p.Endorsers, &db.Endorser{Public: data})
+		}
+
+		var i int
+		for {
+			i++
+			name := read("Endorser #"+strconv.Itoa(i)+" (blank to skip)", "")
+			if name == "" {
+				break
+			}
+
+			data, _, err := keyRing.GetPublic(name)
+			if err != nil {
+				i--
+				fmt.Println(err)
+				continue
+			}
+
+			p.Endorsers = append(p.Endorsers, &db.Endorser{Public: data, Comment: name})
+		}
+
+		f := readInt("Maximum number of byzantine (faulty) endorsers", 1)
+
+		quorum := 1 + (len(p.Endorsers)+f)/2
+		userQuorum := readInt("Quorum", quorum)
+		if userQuorum < quorum {
+			check(fmt.Errorf("insufficient quorum, got %d but at least %d endorsers are required", len(p.Endorsers), quorum))
+		}
+		if userQuorum > len(p.Endorsers) {
+			check(fmt.Errorf("insufficient number of endorsers"))
+		}
+
+		p.Quorum = uint64(userQuorum)
 		m := &jsonpb.Marshaler{EmitDefaults: true, Indent: "  ", OrigName: true}
 		s, err := m.MarshalToString(p)
 		check(err)

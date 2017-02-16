@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/chzyer/readline"
 	"github.com/spf13/cobra"
@@ -35,6 +36,24 @@ func readInt(s string, d int) int {
 			return n
 		}
 	}
+}
+
+func readBool(s string, d bool) bool {
+	s = s + " [y/n]"
+	ds := "n"
+	if d {
+		ds = "y"
+	}
+
+	l := read(s, ds)
+	if strings.ToLower(l) == "y" {
+		return true
+	}
+	if strings.ToLower(l) == "n" {
+		return false
+	}
+
+	return d
 }
 
 func getArg(cmd *cobra.Command, args []string, index int) string {

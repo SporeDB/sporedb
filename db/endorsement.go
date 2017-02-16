@@ -69,7 +69,7 @@ func (db *DB) CanEndorse(s *Spore) error {
 func (db *DB) Submit(s *Spore) (err error) {
 	// Sign the spore before submission
 	s.Emitter, s.Signature = db.Identity, nil // ensure nil signature before hash
-	s.Signature, err = db.KeyRing.Sign(db.HashSpore(s))
+	s.Signature, err = db.KeyRing.Sign(hashMessage(s))
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,12 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 	}
 
 	// Known endorser?
-	pub, _, err := db.KeyRing.GetPublic(e.Emitter)
+	emitter := e.Emitter
+	if e.Emitter == db.Identity {
+		emitter = "" // local endorsement case
+	}
+
+	pub, _, err := db.KeyRing.GetPublic(emitter)
 	if err != nil {
 		return nil
 	}
@@ -214,7 +219,7 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 	}
 
 	// Well-formed signature?
-	if db.KeyRing.Verify(e.Emitter, db.HashSpore(trigger.spore), e.Signature) != nil {
+	if err = db.KeyRing.Verify(emitter, db.HashSpore(trigger.spore), e.Signature); err != nil {
 		return nil
 	}
 

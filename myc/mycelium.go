@@ -147,6 +147,7 @@ func (m *Mycelium) handler(n *Node) {
 		_ = n.conn.Close()
 		return
 	}
+	n.Identity = h.Identity
 
 	// Update identity and reply
 	h.Identity = m.DB.Identity
