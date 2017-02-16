@@ -1,7 +1,16 @@
 syntax = "proto3";
 
 package protocol;
+import "db/version/version.proto";
 
 message Hello {
 	uint64 version = 1;
+	string identity = 2;
+}
+
+message Raw {
+	string key = 1;
+	version.V version = 2;
+	bytes data = 3;
+	bytes signature = 10;
 }

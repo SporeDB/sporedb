@@ -25,9 +25,11 @@ type Function byte
 
 // Function values.
 const (
-	FnHELLO   Function = 0x01
-	FnSPORE            = 0x02
-	FnENDORSE          = 0x03
+	FnHELLO          Function = 0x01
+	FnSPORE                   = 0x02
+	FnENDORSE                 = 0x03
+	FnRECOVERREQUEST          = 0x04
+	FnRAW                     = 0x05
 )
 
 // Call represents a package that can be sent across the mycelium network.
@@ -69,16 +71,9 @@ func (c *Call) Unpack(in InputStream) error {
 	}
 
 	c.F = Function(b)
-
-	switch c.F {
-	case FnHELLO:
-		c.M = &Hello{}
-	case FnSPORE:
-		c.M = &db.Spore{}
-	case FnENDORSE:
-		c.M = &db.Endorsement{}
-	default:
-		return errors.New("invalid function")
+	err = c.setUnpackRecipient()
+	if err != nil {
+		return err
 	}
 
 	// Read length
@@ -100,4 +95,22 @@ func (c *Call) Unpack(in InputStream) error {
 	}
 
 	return proto.Unmarshal(buf, c.M)
+}
+
+func (c *Call) setUnpackRecipient() error {
+	switch c.F {
+	case FnHELLO:
+		c.M = &Hello{}
+	case FnSPORE:
+		c.M = &db.Spore{}
+	case FnENDORSE:
+		c.M = &db.Endorsement{}
+	case FnRECOVERREQUEST:
+		c.M = &db.RecoverRequest{}
+	case FnRAW:
+		c.M = &Raw{}
+	default:
+		return errors.New("invalid function")
+	}
+	return nil
 }

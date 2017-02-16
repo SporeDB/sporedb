@@ -34,3 +34,7 @@ message Operation {
 	bytes data = 3;
 	bytes metadata = 4;
 }
+
+message RecoverRequest {
+	string key = 1;
+}

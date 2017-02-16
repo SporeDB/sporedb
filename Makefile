@@ -11,7 +11,7 @@ protoc:
 	protoc --go_out=plugins=grpc,$(OPT_VERSION),$(OPT_DB):. db/api/*.proto
 	protoc --go_out=$(OPT_VERSION):. db/*.proto
 	protoc --go_out=. db/version/*.proto
-	protoc --go_out=. myc/protocol/*.proto
+	protoc --go_out=$(OPT_VERSION):. myc/protocol/*.proto
 
 lint: install
 	gometalinter -j 1 -t --deadline 1000s \

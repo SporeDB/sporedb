@@ -18,9 +18,9 @@ We introduce SporeDB as a way to solve these problems using simple (but powerful
 
 ## ToDo
 
+* Documentation
 * Recovery after failures
   * Full state-transfer
-  * Single state-transfer (with version comparison)
 * Gossip network
 * RSA+AES Encryption
 * QUIC protocol (UDP) in P2P network
@@ -40,3 +40,5 @@ We introduce SporeDB as a way to solve these problems using simple (but powerful
   * CLI KeyRing management similar to OpenPGP
 * P2P network
 * Database GRPC client
+* Recovery after failures
+  * Single state-transfer (with version comparison)

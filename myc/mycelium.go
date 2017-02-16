@@ -13,20 +13,26 @@ type Mycelium struct {
 	Peers []*Node
 	DB    *db.DB
 
-	transport transport
-	mutex     sync.Mutex
+	transport      transport
+	recoveries     map[string]*recovery
+	mutex          sync.Mutex
+	recoveryQuorum int
 }
 
 // MyceliumConfig is the structure used to setup a new Mycelium.
 type MyceliumConfig struct {
-	Listen string  // Peer API of this mycelium, might be empty to disable listenning.
-	Peers  []*Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
-	DB     *db.DB  // Related local database
+	Listen         string  // Peer API of this mycelium, might be empty to disable listenning.
+	Peers          []*Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
+	DB             *db.DB  // Related local database
+	RecoveryQuorum int
 }
 
 // NewMycelium setups a new Mycelium from its configuration.
 func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
-	m := &Mycelium{DB: c.DB, transport: &transportTCP{}}
+	m := &Mycelium{DB: c.DB, transport: &transportTCP{}, recoveryQuorum: c.RecoveryQuorum}
+	if m.recoveryQuorum <= 0 {
+		m.recoveryQuorum = 2
+	}
 
 	if c.Listen != "" {
 		go func() { _ = m.transport.Listen(c.Listen, m.handler) }()
@@ -62,41 +68,54 @@ func (m *Mycelium) Bind(n *Node) error {
 		return err
 	}
 
-	handshake := func() error {
-		// Try to perform HELLO exchange.
-		c := &protocol.Call{F: protocol.FnHELLO, M: &protocol.Hello{Version: protocol.Version}}
+	handshake := func() (error, string) {
+		// Try to perform HELLO exchange from client-side.
+		// During the handshake, remote version and identity are fetched.
+		c := &protocol.Call{
+			F: protocol.FnHELLO,
+			M: &protocol.Hello{
+				Version:  protocol.Version,
+				Identity: m.DB.Identity,
+			},
+		}
+
 		d, _ := c.Pack()
 		_, err = conn.Write(d)
 		if err != nil {
 			_ = conn.Close()
-			return err
+			return err, ""
 		}
 
 		err = c.Unpack(conn)
 		h, ok := c.M.(*protocol.Hello)
 		if err != nil || !ok || h.Version != protocol.Version {
 			_ = conn.Close()
-			return err
+			return err, ""
 		}
-		return nil
+		return nil, h.Identity
 	}
 
-	err = handshake()
+	err, identity := handshake()
 	if err != nil {
 		_ = conn.Close()
 		return err
 	}
 
-	conn.SetHandshake(handshake)
+	conn.SetHandshake(func() error {
+		err, _ := handshake()
+		return err
+	})
+
+	n.Identity = identity
 	n.conn = conn
 	n.write = make(chan []byte, 64)
+
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-
 	m.Peers = append(m.Peers, n)
 	go m.listener(n)
 
-	fmt.Println("Bound to", n.Address)
+	fmt.Printf("Bound to %s (%s) in client mode\n", n.Address, n.Identity)
 	return nil
 }
 
@@ -115,7 +134,7 @@ func (m *Mycelium) Close() error {
 // handler is called for each new incoming connection.
 // It starts a new listening routine.
 func (m *Mycelium) handler(n *Node) {
-	// Wait for HELLO message
+	// Wait for HELLO message (server-side)
 	c := &protocol.Call{}
 	err := c.Unpack(n.conn)
 	if err != nil || c.F != protocol.FnHELLO {
@@ -129,7 +148,8 @@ func (m *Mycelium) handler(n *Node) {
 		return
 	}
 
-	// Echo
+	// Update identity and reply
+	h.Identity = m.DB.Identity
 	d, _ := c.Pack()
 	_, err = n.conn.Write(d)
 	if err != nil {
@@ -150,7 +170,7 @@ func (m *Mycelium) handler(n *Node) {
 	n.write = make(chan []byte, 64)
 	m.Peers = append(m.Peers, n)
 	go m.listener(n)
-	fmt.Println("Bound to", n.Address)
+	fmt.Printf("Bound to %s (%s) in server mode\n", n.Address, n.Identity)
 }
 
 func (m *Mycelium) listener(n *Node) {
@@ -167,6 +187,10 @@ func (m *Mycelium) listener(n *Node) {
 			_ = m.DB.Endorse(c.M.(*db.Spore))
 		case protocol.FnENDORSE:
 			m.DB.AddEndorsement(c.M.(*db.Endorsement))
+		case protocol.FnRECOVERREQUEST:
+			m.handleRecoverRequest(n, c.M.(*db.RecoverRequest))
+		case protocol.FnRAW:
+			m.handleRaw(n.Identity, c.M.(*protocol.Raw))
 		}
 	}
 }
@@ -178,6 +202,9 @@ func (m *Mycelium) broadcaster() {
 			c.F = protocol.FnSPORE
 		} else if _, ok := message.(*db.Endorsement); ok {
 			c.F = protocol.FnENDORSE
+		} else if r, ok := message.(*db.RecoverRequest); ok {
+			c.F = protocol.FnRECOVERREQUEST
+			m.StartRecovery(r.Key, m.recoveryQuorum)
 		} else {
 			continue
 		}
@@ -193,31 +220,4 @@ func (m *Mycelium) broadcaster() {
 		}
 		m.mutex.Unlock()
 	}
-}
-
-// Node is the structure used to represent a node of the Mycelium.
-type Node struct {
-	Address string
-
-	write   chan []byte
-	conn    conn
-	stopped bool
-}
-
-func (n *Node) emitter() {
-	for data := range n.write {
-		_, _ = n.conn.Write(data)
-	}
-}
-
-// Close properly shuts down node's connection.
-func (n *Node) Close() error {
-	close(n.write)
-	n.stopped = true
-	return n.conn.Close()
-}
-
-// Equals is used to differentiate two nodes.
-func (n *Node) Equals(n2 *Node) bool {
-	return n.Address == n2.Address
 }
