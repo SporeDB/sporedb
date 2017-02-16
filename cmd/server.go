@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -13,6 +14,8 @@ import (
 	endpoint "gitlab.com/SporeDB/sporedb/db/server"
 	"gitlab.com/SporeDB/sporedb/myc"
 )
+
+var recoverKeys *string
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
@@ -44,6 +47,16 @@ var serverCmd = &cobra.Command{
 			DB:     database,
 		})
 
+		// Recover keys (optional)
+		for _, key := range strings.Split(*recoverKeys, ",") {
+			if key == "" {
+				continue
+			}
+
+			fmt.Println("Sending recovery request for key `" + key + "`")
+			database.Messages <- &db.RecoverRequest{Key: key}
+		}
+
 		// Catch SIGINT
 		go func() {
 			c := make(chan os.Signal, 1)
@@ -65,4 +78,6 @@ var serverCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(serverCmd)
+
+	recoverKeys = serverCmd.Flags().StringP("recover", "r", "", "set of keys to recover at startup (coma-separated)")
 }

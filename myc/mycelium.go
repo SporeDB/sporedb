@@ -3,6 +3,7 @@ package myc
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"gitlab.com/SporeDB/sporedb/db"
 	"gitlab.com/SporeDB/sporedb/myc/protocol"
@@ -29,7 +30,12 @@ type MyceliumConfig struct {
 
 // NewMycelium setups a new Mycelium from its configuration.
 func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
-	m := &Mycelium{DB: c.DB, transport: &transportTCP{}, recoveryQuorum: c.RecoveryQuorum}
+	m := &Mycelium{
+		DB:             c.DB,
+		transport:      &transportTCP{},
+		recoveryQuorum: c.RecoveryQuorum,
+		recoveries:     make(map[string]*recovery),
+	}
 	if m.recoveryQuorum <= 0 {
 		m.recoveryQuorum = 2
 	}
@@ -216,6 +222,12 @@ func (m *Mycelium) broadcaster() {
 		}
 
 		m.mutex.Lock()
+		for len(m.Peers) == 0 { // No peer available, wait for broadcast retry
+			m.mutex.Unlock()
+			time.Sleep(5 * time.Second)
+			m.mutex.Lock()
+		}
+
 		for _, p := range m.Peers {
 			p.write <- data
 		}

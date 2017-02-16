@@ -85,6 +85,7 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 		result := r.checkQuorum()
 		if result != nil {
 			_ = m.DB.Apply(&db.Spore{
+				Uuid: "RECOVER_" + result.Key,
 				Operations: []*db.Operation{{
 					Key:  result.Key,
 					Op:   db.Operation_SET,
