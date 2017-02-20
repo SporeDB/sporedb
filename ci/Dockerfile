@@ -1,4 +1,4 @@
-FROM golang:1.7
+FROM golang:1.8
 
 RUN apt-get update && \
   apt-get install -y git autoconf automake libtool curl make g++ unzip libsnappy-dev zlib1g-dev libbz2-dev

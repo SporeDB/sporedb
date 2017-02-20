@@ -1,7 +1,8 @@
-image: lesterpig/sporedb-ci:latest
+image: registry.gitlab.com/sporedb/sporedb:ci
 
 stages:
   - test
+  - lint
 
 before_script:
   - source ci/prepare
@@ -12,7 +13,7 @@ unit tests:
     - make test
 
 code lint:
-  stage: test
+  stage: lint
   script:
     - go get github.com/stretchr/testify/require
     - make lint
