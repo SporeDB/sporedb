@@ -32,6 +32,8 @@ type DB struct {
 	waitingMutex sync.RWMutex
 	cache        *lru.Cache
 	gc           chan *Spore
+
+	ticker *time.Ticker
 }
 
 type dbTrigger struct {
@@ -74,6 +76,8 @@ func (db *DB) Start(blocking bool) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
+	go db.debugRoutine()
+
 	go func() {
 		for s := range db.gc {
 			// Delete expired Spore
@@ -109,6 +113,7 @@ func (db *DB) Start(blocking bool) {
 // Stop asks the database to be gracefully stopped.
 func (db *DB) Stop() {
 	close(db.gc)
+	db.ticker.Stop()
 }
 
 // Get returns the currently stored data for the provided key.
@@ -154,6 +159,13 @@ func (db *DB) HashSpore(s *Spore) []byte {
 	newHash := hashMessage(s)
 	go db.cache.Add(s.Uuid, newHash)
 	return newHash
+}
+
+func (db *DB) debugRoutine() {
+	db.ticker = time.NewTicker(time.Second)
+	for range db.ticker.C {
+		fmt.Printf("| Waiting:%d | Staging:%d |\n", len(db.waiting), len(db.staging))
+	}
 }
 
 func hashMessage(message proto.Message) []byte {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"net"
+	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -31,6 +32,7 @@ func (s *Server) Submit(ctx context.Context, tx *api.Transaction) (*api.Receipt,
 	spore.Policy = tx.Policy
 	spore.Requirements = tx.Requirements
 	spore.Operations = tx.Operations
+	spore.SetTimeout(5 * time.Second)
 
 	return &api.Receipt{Uuid: spore.Uuid}, s.DB.Submit(spore)
 }

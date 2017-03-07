@@ -6,4 +6,5 @@ message Endorsement {
 	string emitter = 1;
 	string uuid = 2;
 	bytes signature = 3;
+	uint32 retries = 4;
 }

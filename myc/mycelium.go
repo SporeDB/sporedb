@@ -193,6 +193,8 @@ func (m *Mycelium) listener(n *Node) {
 		case protocol.FnSPORE:
 			_ = m.DB.Endorse(c.M.(*db.Spore))
 		case protocol.FnENDORSE:
+			e := c.M.(*db.Endorsement)
+			e.Retries = 20
 			m.DB.AddEndorsement(c.M.(*db.Endorsement))
 		case protocol.FnRECOVERREQUEST:
 			m.handleRecoverRequest(n, c.M.(*db.RecoverRequest))

@@ -140,7 +140,7 @@ func (db *DB) executeEndorsement(s *Spore) {
 
 		db.Messages <- e // Broadcast our endorsement for this spore
 
-		// Is the policy only requires one endorsement, bypass staging list
+		// If the policy only requires one endorsement, bypass staging list
 		if db.policies[s.Policy].Quorum == 1 {
 			_ = db.Apply(s)
 			return
@@ -166,10 +166,22 @@ func (db *DB) executeEndorsement(s *Spore) {
 
 // AddEndorsement registers the incoming endorsement.
 func (db *DB) AddEndorsement(e *Endorsement) {
-	db.addEndorsementMap(e, db.waiting, &db.waitingMutex)
+	if e.Retries < 0 {
+		return
+	}
+
+	wtrigger := db.addEndorsementMap(e, db.waiting, &db.waitingMutex)
 	trigger := db.addEndorsementMap(e, db.staging, &db.stagingMutex)
 
 	if trigger == nil {
+		if wtrigger == nil {
+			// TODO use a "stagingEndorsement" map for better performances than pure retries
+			e.Retries--
+			time.AfterFunc(100*time.Millisecond, func() {
+				db.AddEndorsement(e)
+			})
+			return
+		}
 		return
 	}
 
@@ -192,7 +204,7 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 	// Spore being processed?
 	trigger, ok := ma[e.Uuid]
 	if !ok {
-		return nil // TODO retry till timeout or spore reception
+		return nil
 	}
 
 	// Already registered endorsement?
