@@ -150,6 +150,7 @@ Feedbacks about the project and the whitepaper will be very much appreciated! ðŸ
 
 ## ToDo
 
+* Fully-working transactions
 * (Moar) Documentation
 * Recovery after failures
   * Full state-transfer
@@ -166,6 +167,8 @@ Feedbacks about the project and the whitepaper will be very much appreciated! ðŸ
   * CONCAT operation
   * ADD operation (float)
   * MUL operation (float)
+  * SADD operation (set)
+  * SREM operation (set)
 * Basic policy management
 * Endorsement algorithm
 * Integrity with Ed25519 signatures

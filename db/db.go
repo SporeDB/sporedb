@@ -122,6 +122,7 @@ func (db *DB) Get(key string) ([]byte, *version.V, error) {
 }
 
 // Apply directly applies the Spore's operations to the database (atomic).
+// TODO FIXME transactions applying several operations on the same key will not work properly.
 func (db *DB) Apply(s *Spore) error {
 	db.Store.Lock()
 	defer db.Store.Unlock()

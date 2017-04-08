@@ -12,6 +12,8 @@ func (c *Client) getCLIMap() cliMap {
 		"CONCAT":  c.processGeneric2("CONCAT"),
 		"ADD":     c.processGeneric2("ADD"),
 		"MUL":     c.processGeneric2("MUL"),
+		"SADD":    c.processGeneric2("SADD"),
+		"SREM":    c.processGeneric2("SREM"),
 		"POL":     c.SetPolicy,
 	}
 }

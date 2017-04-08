@@ -23,6 +23,7 @@ lint: install
 
 test: install
 	@go test -cover $(BASE_PATH)/db
+	@go test -cover $(BASE_PATH)/db/encoding
 	@go test -cover $(BASE_PATH)/db/drivers/rocksdb
 	@go test -cover $(BASE_PATH)/db/version
 	@go test -cover $(BASE_PATH)/myc

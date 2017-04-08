@@ -29,6 +29,9 @@ message Operation {
 		// Operations on numeric values
 		ADD = 10;
 		MUL = 11;
+		// Operations on set values
+		SADD = 20;
+		SREM = 21;
 	}
 	Op op = 2;
 	bytes data = 3;

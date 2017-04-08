@@ -42,9 +42,19 @@ func TestOperation_CheckConflict(t *testing.T) {
 		op2 := &Operation{Key: "f", Op: Operation_ADD, Data: []byte{0x02}}
 		ok(t, op1, op2)
 	})
+	t.Run("SADD SREM different data", func(t *testing.T) {
+		op1 := &Operation{Key: "a", Op: Operation_SADD, Data: []byte("add")}
+		op2 := &Operation{Key: "a", Op: Operation_SREM, Data: []byte("rem")}
+		ok(t, op1, op2)
+	})
+	t.Run("SADD SREM same data", func(t *testing.T) {
+		op1 := &Operation{Key: "a", Op: Operation_SADD, Data: []byte("hey")}
+		op2 := &Operation{Key: "a", Op: Operation_SREM, Data: []byte("hey")}
+		ko(t, op1, op2)
+	})
 }
 
-func TestOperation_Exec(t *testing.T) {
+func TestOperation_Exec_Simple(t *testing.T) {
 	opSet := &Operation{Op: Operation_SET, Data: []byte("hello")}
 	opAdd := &Operation{Op: Operation_ADD, Data: []byte("1.5")}
 	opMul := &Operation{Op: Operation_MUL, Data: []byte("3")}
