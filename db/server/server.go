@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/SporeDB/sporedb/db"
 	"gitlab.com/SporeDB/sporedb/db/api"
+	"gitlab.com/SporeDB/sporedb/db/encoding"
 )
 
 // Server is the GRPC SporeDB endpoint.
@@ -24,6 +25,45 @@ func (s *Server) Get(ctx context.Context, key *api.Key) (*api.Value, error) {
 		Version: version,
 		Data:    value,
 	}, err
+}
+
+// Members returns the members of a specific set.
+func (s *Server) Members(ctx context.Context, key *api.Key) (*api.Values, error) {
+	value, version, err := s.DB.Get(key.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	set := encoding.NewSet()
+	err = set.UnmarshalBinary(value)
+	if err != nil {
+		return nil, err
+	}
+
+	values := &api.Values{
+		Version: version,
+	}
+
+	for key := range set.Elements {
+		values.Data = append(values.Data, []byte(key))
+	}
+	return values, nil
+}
+
+// Contains returns whether a particular set contains a specific value or not.
+func (s *Server) Contains(ctx context.Context, kv *api.KeyValue) (*api.Boolean, error) {
+	value, _, err := s.DB.Get(kv.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	set := encoding.NewSet()
+	err = set.UnmarshalBinary(value)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Boolean{Boolean: set.Contains(kv.Value)}, nil
 }
 
 // Submit submits a set of operations to the database.

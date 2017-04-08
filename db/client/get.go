@@ -45,3 +45,35 @@ func (c *Client) processVERSION(arg string) {
 
 	fmt.Printf("0x%x\n", v.Hash)
 }
+
+func (c *Client) processMEMBERS(arg string) {
+	ctx, done := c.ctx()
+	defer done()
+	values, err := c.client.Members(ctx, &api.Key{Key: arg})
+	if err != nil {
+		fmt.Println("Error:", grpc.ErrorDesc(err))
+		return
+	}
+
+	fmt.Println(len(values.Data), "element(s)")
+	for _, data := range values.Data {
+		fmt.Printf("- %s\n", data)
+	}
+}
+
+func (c *Client) processCONTAINS(arg string) {
+	ctx, done := c.ctx()
+	defer done()
+	arg1, arg2, err := split2args(arg)
+	if err != nil {
+		fmt.Println("CONTAINS function expects two arguments: (container, element)")
+		return
+	}
+
+	boolean, err := c.client.Contains(ctx, &api.KeyValue{Key: arg1, Value: []byte(arg2)})
+	if err != nil {
+		fmt.Println("Error:", grpc.ErrorDesc(err))
+	}
+
+	fmt.Println(boolean.Boolean)
+}

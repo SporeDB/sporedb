@@ -6,6 +6,8 @@ import "db/version/version.proto";
 
 service SporeDB {
 	rpc Get(Key) returns (Value) {}
+	rpc Members(Key) returns (Values) {}
+	rpc Contains(KeyValue) returns (Boolean) {}
 	rpc Submit(Transaction) returns (Receipt) {}
 }
 
@@ -16,6 +18,20 @@ message Key {
 message Value {
 	version.V version = 1;
 	bytes data = 2;
+}
+
+message KeyValue {
+	string key = 1;
+	bytes value = 2;
+}
+
+message Values {
+	version.V version = 1;
+	repeated bytes data = 2;
+}
+
+message Boolean {
+	bool boolean = 1;
 }
 
 message Transaction {

@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -24,17 +25,16 @@ func (c *Client) Submit(ctx context.Context, tx *api.Transaction) (uuid string, 
 
 func (c *Client) processGeneric2(op string) func(arg string) {
 	return func(arg string) {
-		args := strings.SplitN(arg, " ", 2)
-		if len(args) < 2 {
-			fmt.Println(op + " function expects two arguments: (key, data)")
+		arg1, arg2, err := split2args(arg)
+		if err != nil {
+			fmt.Println(op, "function expects two arguments: (key, data)")
 			return
 		}
-
 		tx := &api.Transaction{
 			Operations: []*db.Operation{{
-				Key:  args[0],
+				Key:  arg1,
 				Op:   db.Operation_Op(db.Operation_Op_value[op]),
-				Data: []byte(args[1]),
+				Data: []byte(arg2),
 			}},
 			Policy: c.policy,
 		}
@@ -50,4 +50,13 @@ func (c *Client) processGeneric2(op string) func(arg string) {
 
 		fmt.Println("Transaction:", uuid)
 	}
+}
+
+func split2args(arg string) (arg1, arg2 string, err error) {
+	args := strings.SplitN(arg, " ", 2)
+	if len(args) < 2 {
+		return "", "", io.ErrUnexpectedEOF
+	}
+
+	return args[0], args[1], nil
 }
