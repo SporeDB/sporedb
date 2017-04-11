@@ -44,7 +44,7 @@ func TestHashSpore(t *testing.T) {
 func TestDeadlineToDuration(t *testing.T) {
 	s := NewSpore()
 	s.SetTimeout(time.Second)
-	require.InDelta(t, int64(time.Second), int64(deadlineToDuration(s.Deadline)), float64(time.Millisecond))
+	require.InDelta(t, int64(time.Second), int64(deadlineToDuration(s.Deadline)), float64(50*time.Millisecond))
 }
 
 func TestDB_Single_Quorum1(t *testing.T) {
