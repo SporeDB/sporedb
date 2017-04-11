@@ -21,6 +21,24 @@ func (c *Client) Get(ctx context.Context, key string) (value []byte, v *version.
 	return
 }
 
+// Members returns the slice of every element of a container.
+func (c *Client) Members(ctx context.Context, key string) (values [][]byte, v *version.V, err error) {
+	members, err := c.client.Members(ctx, &api.Key{Key: key})
+	if members != nil {
+		values = members.Data
+		v = members.Version
+	}
+
+	return
+}
+
+// Contains returns wether or not a specific value is present in a container.
+func (c *Client) Contains(ctx context.Context, key string, value []byte) (contains bool, err error) {
+	boolean, err := c.client.Contains(ctx, &api.KeyValue{Key: key, Value: value})
+	contains = boolean.Boolean
+	return
+}
+
 func (c *Client) processGET(arg string) {
 	ctx, done := c.ctx()
 	defer done()
@@ -49,14 +67,14 @@ func (c *Client) processVERSION(arg string) {
 func (c *Client) processMEMBERS(arg string) {
 	ctx, done := c.ctx()
 	defer done()
-	values, err := c.client.Members(ctx, &api.Key{Key: arg})
+	values, _, err := c.Members(ctx, arg)
 	if err != nil {
 		fmt.Println("Error:", grpc.ErrorDesc(err))
 		return
 	}
 
-	fmt.Println(len(values.Data), "element(s)")
-	for _, data := range values.Data {
+	fmt.Println(len(values), "element(s)")
+	for _, data := range values {
 		fmt.Printf("- %s\n", data)
 	}
 }
@@ -70,10 +88,10 @@ func (c *Client) processCONTAINS(arg string) {
 		return
 	}
 
-	boolean, err := c.client.Contains(ctx, &api.KeyValue{Key: arg1, Value: []byte(arg2)})
+	contains, err := c.Contains(ctx, arg1, []byte(arg2))
 	if err != nil {
 		fmt.Println("Error:", grpc.ErrorDesc(err))
 	}
 
-	fmt.Println(boolean.Boolean)
+	fmt.Println(contains)
 }
