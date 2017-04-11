@@ -95,7 +95,6 @@ func (db *DB) Start(blocking bool) {
 					delete(db.waiting, k)
 				} else if err == ErrDeadlineExpired {
 					delete(db.waiting, k)
-				} else {
 				}
 			}
 

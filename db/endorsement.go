@@ -166,7 +166,7 @@ func (db *DB) executeEndorsement(s *Spore) {
 
 // AddEndorsement registers the incoming endorsement.
 func (db *DB) AddEndorsement(e *Endorsement) {
-	if e.Retries < 0 {
+	if e.Retries == 0 {
 		return
 	}
 
@@ -245,5 +245,5 @@ func deadlineToDuration(t *timestamp.Timestamp) time.Duration {
 	}
 
 	deadline := time.Unix(t.Seconds, int64(t.Nanos))
-	return deadline.Sub(time.Now())
+	return time.Until(deadline)
 }
