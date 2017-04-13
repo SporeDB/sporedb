@@ -16,6 +16,16 @@ This strong coordination reduces scalability and performance of the global syste
 
 We introduce SporeDB as a way to solve these problems using simple (but powerful) techniques.
 
+## Overview
+
+The SporeDB architecture is represented in the following figure :
+* SporeDB nodes are connected through a P2P network using a home-made "Mycelium" protocol ;
+* Every node store a whole copy of the database, ensuring data security ;
+* Write operations are applied by the cluster with the SporeDB Consensus Algorithm, presented (and hopefully proved) in the whitepaper ;
+* Nodes expose a GRPC API server that can be used by clients to access the data and to submit transactions.
+
+![overview](doc/overview.png)
+
 ## Installation
 
 ### Easy installation (Docker)
@@ -148,18 +158,7 @@ It is very new and not stable enough.
 
 Feedbacks about the project and the whitepaper will be very much appreciated! ðŸ˜˜
 
-## ToDo
-
-* Fully-working transactions
-* (Moar) Documentation
-* Recovery after failures
-  * Full state-transfer
-* Gossip network
-* RSA+AES Encryption
-* QUIC protocol (UDP) in P2P network
-* Integration tests
-
-## Done
+## Implemented features
 
 * Basic database management
   * RocksDB Layer
@@ -174,6 +173,7 @@ Feedbacks about the project and the whitepaper will be very much appreciated! ðŸ
 * Integrity with Ed25519 signatures
   * CLI KeyRing management similar to OpenPGP
 * P2P network
+* GRPC Server / Client API
 * Database GRPC client
 * Recovery after failures
   * Single state-transfer (with version comparison)

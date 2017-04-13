@@ -1,5 +1,7 @@
 BASE_PATH=gitlab.com/SporeDB/sporedb
 CGO_FLAGS=CGO_LDFLAGS="-lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy"
+REVISION=$(shell git rev-parse --short HEAD || echo )
+DOCKER_TAG=registry.gitlab.com/sporedb/sporedb
 
 OPT_VERSION=Mdb/version/version.proto=$(BASE_PATH)/db/version
 OPT_DB=Mdb/spore.proto=$(BASE_PATH)/db
@@ -32,4 +34,5 @@ test: install
 
 image: install
 	go build -ldflags "-s -w" .
-	docker build -t registry.gitlab.com/sporedb/sporedb .
+	docker build -t $(DOCKER_TAG) .
+	docker tag $(DOCKER_TAG) $(DOCKER_TAG):$(REVISION)
