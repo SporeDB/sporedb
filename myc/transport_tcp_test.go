@@ -10,6 +10,7 @@ import (
 
 func Test_transportTCP(t *testing.T) {
 	srv := &transportTCP{}
+	srv2 := &transportTCP{}
 	cli := &transportTCP{}
 
 	p := "localhost:4300"
@@ -22,13 +23,13 @@ func Test_transportTCP(t *testing.T) {
 			_, _ = n.conn.Write(b[:10])
 
 			// Simulate a temporary crash
-			_ = n.conn.Close()
 			_ = srv.Close()
+			_ = n.conn.Close()
 
-			time.Sleep(100 * time.Millisecond)
-			_ = srv.Listen(p, func(nn *Node) {
+			time.Sleep(2000 * time.Millisecond)
+			_ = srv2.Listen(p, func(nn *Node) {
 				_, _ = nn.conn.Write(b[10:])
-				_ = srv.Close()
+				_ = srv2.Close()
 			})
 		})
 	}()
@@ -41,11 +42,19 @@ func Test_transportTCP(t *testing.T) {
 	b2 := make([]byte, len(b))
 
 	// Wait a bit for server startup
-	time.Sleep(time.Second)
+	var n int
+	for i := 0; i < 10; i++ {
+		time.Sleep(500 * time.Millisecond)
+		n, err = c.Write(b)
 
-	n, err := c.Write(b)
-	require.Nil(t, err)
-	require.Exactly(t, len(b), n)
+		if n > 0 {
+			require.Nil(t, err)
+			require.Exactly(t, len(b), n)
+			break
+		}
+	}
+
+	require.True(t, n > 0, "Should successfully write at least one byte")
 
 	n, err = io.ReadFull(c, b2)
 	require.Nil(t, err)
