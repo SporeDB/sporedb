@@ -1,4 +1,3 @@
-*.pb.go
 *.pem
 .db*
 sporedb
