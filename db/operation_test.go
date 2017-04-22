@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"gitlab.com/SporeDB/sporedb/db/operations"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,10 +84,11 @@ func TestOperation_Exec_Simple(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", tc.op.Op.String(), tc.data), func(t *testing.T) {
-			res, err := tc.op.Exec(tc.data)
+			value := operations.NewValue(tc.data)
+			err := tc.op.Exec(value)
 			if !tc.errExpected {
 				require.Nil(t, err)
-				require.Exactly(t, tc.resExpected, res)
+				require.Exactly(t, tc.resExpected, value.Raw)
 			} else {
 				require.NotNil(t, err)
 			}

@@ -10,6 +10,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	lru "github.com/hashicorp/golang-lru"
 
+	"gitlab.com/SporeDB/sporedb/db/operations"
 	"gitlab.com/SporeDB/sporedb/db/version"
 	"gitlab.com/SporeDB/sporedb/myc/sec"
 )
@@ -76,7 +77,7 @@ func (db *DB) Start(blocking bool) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	go db.debugRoutine()
+	// go db.debugRoutine()
 
 	go func() {
 		for s := range db.gc {
@@ -121,31 +122,44 @@ func (db *DB) Get(key string) ([]byte, *version.V, error) {
 }
 
 // Apply directly applies the Spore's operations to the database (atomic).
-// TODO FIXME transactions applying several operations on the same key will not work properly.
 func (db *DB) Apply(s *Spore) error {
 	db.Store.Lock()
 	defer db.Store.Unlock()
 
-	keys := make([]string, len(s.Operations))
-	values := make([][]byte, len(s.Operations))
-	versions := make([]*version.V, len(s.Operations))
+	values := make(map[string]*operations.Value)
 
-	for i, op := range s.Operations {
-		value, v, err := db.Store.Get(op.Key)
-		if err != nil && v != version.NoVersion {
-			return err
+	for _, op := range s.Operations {
+		value, ok := values[op.Key]
+		if !ok {
+			data, v, err := db.Store.Get(op.Key)
+			if err != nil && v != version.NoVersion {
+				return err
+			}
+
+			values[op.Key] = operations.NewValue(data)
+			value = values[op.Key]
 		}
 
-		keys[i] = op.Key
-		values[i], err = op.Exec(value)
+		err := op.Exec(value)
 		if err != nil {
 			return err
 		}
-		versions[i] = version.New(values[i])
+	}
+
+	keys := make([]string, len(values))
+	rawValues := make([][]byte, len(values))
+	versions := make([]*version.V, len(values))
+
+	var i int
+	for k, v := range values {
+		keys[i] = k
+		rawValues[i] = v.Raw
+		versions[i] = version.New(v.Raw)
+		i++
 	}
 
 	fmt.Println("Applying transaction", s.Uuid)
-	return db.Store.SetBatch(keys, values, versions)
+	return db.Store.SetBatch(keys, rawValues, versions)
 }
 
 // HashSpore process one spore's hash.

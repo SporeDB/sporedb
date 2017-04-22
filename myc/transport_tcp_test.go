@@ -26,7 +26,7 @@ func Test_transportTCP(t *testing.T) {
 			_ = srv.Close()
 			_ = n.conn.Close()
 
-			time.Sleep(2000 * time.Millisecond)
+			time.Sleep(3000 * time.Millisecond)
 			_ = srv2.Listen(p, func(nn *Node) {
 				_, _ = nn.conn.Write(b[10:])
 				_ = srv2.Close()

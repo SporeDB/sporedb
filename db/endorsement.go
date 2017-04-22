@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/SporeDB/sporedb/db/operations"
+
 	"github.com/golang/protobuf/ptypes/timestamp"
 )
 
@@ -13,6 +15,9 @@ var ErrDeadlineExpired = errors.New("unable to endorse a spore with expired dead
 
 // ErrConflictingWithStaging is returned when a node cannot endorse a spore because it already has endorsed a conflicting spore.
 var ErrConflictingWithStaging = errors.New("unable to endorse a spore due to conflicting promise")
+
+// ErrBehindRequirement is returned when a node cannot endorse a spore due to unfulfillable requirement.
+var ErrBehindRequirement = errors.New("unable to endorse a spore due to unfulfillable requirement")
 
 // CanEndorse checks wether a Spore can be endorsed or not regarding current database status.
 // It is thread-safe.
@@ -37,15 +42,23 @@ func (db *DB) CanEndorse(s *Spore) error {
 		}
 	}
 
+	values := make(map[string]*operations.Value)
+
 	for _, op := range s.Operations {
-		d, _, _ := db.Store.Get(op.Key)
-		sim, err := op.Exec(d)
+		v, ok := values[op.Key]
+		if !ok {
+			d, _, _ := db.Store.Get(op.Key)
+			values[op.Key] = operations.NewValue(d)
+			v = values[op.Key]
+		}
+
+		err := op.Exec(v)
 		if err != nil {
 			db.Store.Unlock()
 			return err
 		}
 
-		err = db.Check(s.Policy, op, sim)
+		err = db.Check(s.Policy, op, v)
 		if err != nil {
 			db.Store.Unlock()
 			return err
@@ -54,8 +67,13 @@ func (db *DB) CanEndorse(s *Spore) error {
 	db.Store.Unlock()
 
 	// Promise: Check for conflicts with staging
+	return db.checkConflictWithStaging(s)
+}
+
+func (db *DB) checkConflictWithStaging(s *Spore) error {
 	db.stagingMutex.RLock()
 	defer db.stagingMutex.RUnlock()
+
 	for _, s2 := range db.staging {
 		if s.CheckConflict(s2.spore) != nil {
 			return ErrConflictingWithStaging

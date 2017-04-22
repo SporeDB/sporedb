@@ -3,6 +3,8 @@ package db
 import (
 	"bytes"
 	"errors"
+
+	"gitlab.com/SporeDB/sporedb/db/operations"
 )
 
 // ParallelType specifies the various options available when specifiying a parallelizable operation.
@@ -29,6 +31,15 @@ var ParallelMatrix = map[Operation_Op]map[Operation_Op]ParallelType{
 		Operation_SREM: ParallelTypeDEFAULT,
 		Operation_SADD: ParallelTypeDISALLOWEQUAL,
 	},
+}
+
+var runners = map[Operation_Op]operations.Runner{
+	Operation_SET:    operations.Set,
+	Operation_CONCAT: operations.Append,
+	Operation_ADD:    operations.Add,
+	Operation_MUL:    operations.Mul,
+	Operation_SADD:   operations.Sadd,
+	Operation_SREM:   operations.Srem,
 }
 
 // CheckConflict returns an error if two operations cannot be executed in parallel.
@@ -64,13 +75,11 @@ func (o *Operation) CheckConflict(o2 *Operation) error {
 }
 
 // Exec returns the result of the given operation against stored data.
-func (o *Operation) Exec(data []byte) (result []byte, err error) {
+func (o *Operation) Exec(v *operations.Value) error {
 	r, implemented := runners[o.Op]
 	if !implemented {
-		err = errors.New("operation not yet implemented")
-		return
+		return errors.New("operation not yet implemented")
 	}
 
-	result, err = r(o.Data, data)
-	return
+	return r(o.Data, v)
 }
