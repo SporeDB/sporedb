@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"regexp"
+
+	"gitlab.com/SporeDB/sporedb/db/operations"
 )
 
 // Error messages for policy.
@@ -24,18 +26,16 @@ var NonePolicy = &Policy{
 }
 
 // Check checks that a given operation is valid given its simulation and its database policy.
-func (db *DB) Check(policy string, o *Operation, simulation []byte) error {
+func (db *DB) Check(policy string, o *Operation, value *operations.Value) error {
 	p := db.policies[policy]
 	if p == nil {
 		return ErrUnknownPolicy
 	}
 
-	// TODO check endorsements vs quorum
-
 	// TODO check global size
 
 	// Check simulation size
-	l := uint64(len(simulation))
+	l := uint64(len(value.Raw))
 	if p.MaxOpSize > 0 && l > p.MaxOpSize {
 		return ErrOpTooLarge
 	}
