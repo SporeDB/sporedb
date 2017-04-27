@@ -40,17 +40,17 @@ We suggest that you use docker volumes to preserve SporeDB states, like this:
 $ docker run --rm -it -e PASSWORD=******* -v $PWD:/sporedb registry.gitlab.com/sporedb/sporedb --help
 ```
 
-### Advanced installation
+### Build environement
 
 The following requirements are needed before building SporeDB:
 
-* [Go 1.7+](https://golang.org/dl/) properly configured
+* [Go 1.8+](https://golang.org/dl/) properly configured
 * [RocksDB v5.1.x](https://github.com/facebook/rocksdb.git)
 * [Protoc v3.1.x](https://github.com/google/protobuf.git)
-  * With the [Protoc-Gen-Go](github.com/golang/protobuf/protoc-gen-go) plugin
+  * With the [Protoc-Gen-Go](https://github.com/golang/protobuf) plugin
 
-You might find some help in the [continuous integration](ci/Dockerfile) Dockerfile.
-
+**To setup a compilation environement please refer to the up-to-date [continuous integration](ci/Dockerfile) Dockerfile.**
+After this setup your can build the project with
 ```bash
 $ make
 ```
