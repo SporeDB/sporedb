@@ -151,6 +151,27 @@ value
 Documentation is being written about client capabilities.
 You can though check the available commands [here](db/client/cli.go).
 
+### Adding a systemd service
+
+If you want to start your SporeDB automatically at each boot, you should consider creating a systemd service.
+
+First, copy the service skeleton in the systemd configuration directory:
+
+```bash
+$ sudo cp ./sporedb.service /etc/systemd/system
+```
+
+Now you'll have to edit the file `/etc/systemd/system/sporedb.service` according to your installation.
+
+Finally you can use systemd commands to manage your sporedb installation
+
+```bash
+$ sudo systemctl start sporedb       #--- start sporedb now
+$ sudo systemctl status sporedb      #--- check sporedb status
+$ sudo systemctl enable sporedb      #--- start sporedb on boot
+$ sudo journalctl -u sporedb         #--- show sporedb logs
+```
+
 ## Acknowledgements
 
 SporeDB should **NOT** be used in production yet.

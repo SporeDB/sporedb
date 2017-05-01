@@ -1,0 +1,11 @@
+[Unit]
+Description=SporeDB Distributed Database
+
+[Service]
+Environment=PASSWORD=change_me
+WorkingDirectory=/home/sporedb/spore
+ExecStart=/home/sporedb/go/bin/sporedb server
+User=sporedb
+
+[Install]
+WantedBy=multi-user.target
