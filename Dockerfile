@@ -2,13 +2,12 @@ FROM ubuntu:16.10
 ARG builddeps="git autoconf automake libtool curl make g++ unzip"
 ARG rundeps="libsnappy-dev zlib1g-dev libbz2-dev"
 
-
 # Install RocksDB
 
 RUN cd /tmp && \
   apt-get update && \
   apt-get install -y $builddeps $rundeps && \
-  git clone --depth 1 --branch 5.1.fb https://github.com/facebook/rocksdb.git && \
+  git clone --depth 1 --branch 5.4.fb https://github.com/facebook/rocksdb.git && \
   cd rocksdb && \
   PORTABLE=1 make shared_lib && \
   INSTALL_PATH=/usr make install-shared && \
