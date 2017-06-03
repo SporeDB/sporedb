@@ -31,6 +31,7 @@ test: install
 	@go test -cover $(BASE_PATH)/myc
 	@go test -cover $(BASE_PATH)/myc/protocol
 	@go test -cover $(BASE_PATH)/myc/sec
+	@go test $(BASE_PATH)/tests
 
 image: install
 	go build -ldflags "-s -w" .

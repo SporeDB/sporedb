@@ -1,0 +1,15 @@
+identity: carol
+keyring: carol.pem
+
+db:
+  path: .db_carol
+  policies:
+    - policy.json
+
+mycelium:
+  peers:
+    - "localhost:4010"
+    - "localhost:4110"
+
+api:
+  listen: "localhost:4200"

@@ -1,9 +1,10 @@
 identity: alice
+keyring: alice.pem
 
 db:
   path: .db_alice
   policies:
-    - ../solo.json
+    - policy.json
 
 mycelium:
   listen: "localhost:4010"
