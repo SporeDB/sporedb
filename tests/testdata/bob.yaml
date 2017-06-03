@@ -1,11 +1,13 @@
 identity: bob
+keyring: bob.pem
 
 db:
   path: .db_bob
   policies:
-    - ../solo.json
+    - policy.json
 
 mycelium:
+  listen: "localhost:4110"
   peers:
     - "localhost:4010"
 

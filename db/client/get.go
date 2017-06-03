@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"google.golang.org/grpc"
 
@@ -74,7 +75,15 @@ func (c *Client) processMEMBERS(arg string) {
 	}
 
 	fmt.Println(len(values), "element(s)")
-	for _, data := range values {
+
+	strValues := make([]string, len(values))
+	for i, data := range values {
+		strValues[i] = string(data)
+	}
+
+	sort.Strings(strValues)
+
+	for _, data := range strValues {
 		fmt.Printf("- %s\n", data)
 	}
 }
