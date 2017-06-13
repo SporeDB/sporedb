@@ -6,7 +6,10 @@ DOCKER_TAG=registry.gitlab.com/sporedb/sporedb
 OPT_VERSION=Mdb/version/version.proto=$(BASE_PATH)/db/version
 OPT_DB=Mdb/spore.proto=$(BASE_PATH)/db
 
-install: protoc
+install:
+	go get -t -tags rocksdb ./...
+
+install-bolt:
 	go get -t ./...
 
 protoc:
@@ -24,9 +27,10 @@ lint: install
 		./...
 
 test: install
-	@go test -cover $(BASE_PATH)/db
 	@go test -cover $(BASE_PATH)/db/encoding
-	@go test -cover $(BASE_PATH)/db/drivers/rocksdb
+	@go test -cover $(BASE_PATH)/db
+	@go test -cover $(BASE_PATH)/db/drivers/boltdb
+	@go test -tags rocksdb -cover $(BASE_PATH)/db/drivers/rocksdb
 	@go test -cover $(BASE_PATH)/db/version
 	@go test -cover $(BASE_PATH)/myc
 	@go test -cover $(BASE_PATH)/myc/protocol

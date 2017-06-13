@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,12 +11,40 @@ import (
 	"github.com/spf13/viper"
 
 	"gitlab.com/SporeDB/sporedb/db"
-	"gitlab.com/SporeDB/sporedb/db/drivers/rocksdb"
+	"gitlab.com/SporeDB/sporedb/db/drivers"
+	"gitlab.com/SporeDB/sporedb/db/drivers/boltdb"
 	endpoint "gitlab.com/SporeDB/sporedb/db/server"
 	"gitlab.com/SporeDB/sporedb/myc"
 )
 
 var recoverKeys *string
+var storeDrivers map[string]drivers.Constructor
+
+func init() {
+	addDriver("boltdb", func(p string) (db.Store, error) {
+		return boltdb.New(p)
+	})
+}
+
+func addDriver(name string, c drivers.Constructor) {
+	if storeDrivers == nil {
+		storeDrivers = make(map[string]drivers.Constructor)
+	}
+
+	storeDrivers[name] = c
+}
+
+func getDriver(name string, path string) (db.Store, error) {
+	if storeDrivers == nil || storeDrivers[name] == nil {
+		fmt.Fprintln(os.Stderr, "Available database drivers:")
+		for k := range storeDrivers {
+			fmt.Fprintln(os.Stderr, "  *", k)
+		}
+		return nil, errors.New("unknown database driver: " + name)
+	}
+
+	return storeDrivers[name](path)
+}
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
@@ -24,7 +53,7 @@ var serverCmd = &cobra.Command{
 		keyRing := getKeyRing()
 		check(keyRing.UnlockPrivate(getPassword()))
 
-		store, err := rocksdb.New(viper.GetString("db.path"))
+		store, err := getDriver(viper.GetString("db.driver"), viper.GetString("db.path"))
 		check(err)
 
 		database := db.NewDB(store, viper.GetString("identity"), keyRing)

@@ -3,6 +3,7 @@ keyring: alice.pem
 
 db:
   path: .db_alice
+  driver: rocksdb
   policies:
     - policy.json
 

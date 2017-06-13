@@ -3,11 +3,12 @@ package db
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/SporeDB/sporedb/db/drivers/rocksdb"
+	"gitlab.com/SporeDB/sporedb/db/drivers/boltdb"
 	"gitlab.com/SporeDB/sporedb/myc/sec"
 )
 
@@ -15,7 +16,7 @@ func getTestingDB(t *testing.T) (db *DB, done func()) {
 	path, err := ioutil.TempDir("", "sporedb_db_")
 	require.Nil(t, err)
 
-	store, err := rocksdb.New(path)
+	store, err := boltdb.New(filepath.Join(path, "db"))
 	require.Nil(t, err)
 
 	keyRing := sec.NewKeyRingEd25519()

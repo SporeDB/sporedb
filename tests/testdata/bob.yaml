@@ -3,6 +3,7 @@ keyring: bob.pem
 
 db:
   path: .db_bob
+  driver: rocksdb
   policies:
     - policy.json
 
