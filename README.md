@@ -66,7 +66,6 @@ Finally, some dependencies are required to build protobuf files:
   * With the [Protoc-Gen-Go](https://github.com/golang/protobuf) plugin
 
 **To setup a clean compilation environment please refer to the up-to-date [continuous integration](ci/Dockerfile) Dockerfile.**
-```
 
 ## Configuration
 
