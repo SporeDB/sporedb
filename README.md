@@ -28,7 +28,13 @@ The SporeDB architecture is represented in the following figure :
 
 ## Installation
 
-### Easy installation (Docker)
+### With Go
+
+```bash
+$ go get gitlab.com/SporeDB/sporedb
+```
+
+### Without Go (Docker)
 
 ```bash
 $ docker pull registry.gitlab.com/sporedb/sporedb
@@ -40,19 +46,26 @@ We suggest that you use docker volumes to preserve SporeDB states, like this:
 $ docker run --rm -it -e PASSWORD=******* -v $PWD:/sporedb registry.gitlab.com/sporedb/sporedb --help
 ```
 
-### Build environement
+### Build from source
 
-The following requirements are needed before building SporeDB:
+[Go 1.8+](https://golang.org/dl/) is required for source building:
 
-* [Go 1.8+](https://golang.org/dl/) properly configured
-* [RocksDB v5.1.x](https://github.com/facebook/rocksdb.git)
+```
+$ make install-bolt
+```
+
+[RocksDB v5.4.x](https://github.com/facebook/rocksdb.git) is required to build SporeDB with RocksDB support (provides enhanced write performance):
+
+```
+$ make
+```
+
+Finally, some dependencies are required to build protobuf files:
+
 * [Protoc v3.1.x](https://github.com/google/protobuf.git)
   * With the [Protoc-Gen-Go](https://github.com/golang/protobuf) plugin
 
-**To setup a compilation environement please refer to the up-to-date [continuous integration](ci/Dockerfile) Dockerfile.**
-After this setup your can build the project with
-```bash
-$ make
+**To setup a clean compilation environment please refer to the up-to-date [continuous integration](ci/Dockerfile) Dockerfile.**
 ```
 
 ## Configuration
@@ -198,3 +211,6 @@ Feedbacks about the project and the whitepaper will be very much appreciated! ðŸ
 * Database GRPC client
 * Recovery after failures
   * Single state-transfer (with version comparison)
+* Pluggable underlying database drivers
+  * BoltDB (default)
+  * RocksDB

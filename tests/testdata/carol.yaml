@@ -3,6 +3,7 @@ keyring: carol.pem
 
 db:
   path: .db_carol
+  driver: rocksdb
   policies:
     - policy.json
 

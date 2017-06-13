@@ -3,6 +3,7 @@ keyring: keyring.pem
 
 db:
   path: .db
+  driver: boltdb # Change to rocksdb for better write performances
   policies:
     - solo.json
 
