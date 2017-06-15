@@ -4,6 +4,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"gitlab.com/SporeDB/sporedb/db"
 	"gitlab.com/SporeDB/sporedb/db/version"
 	"gitlab.com/SporeDB/sporedb/myc/protocol"
@@ -31,6 +33,10 @@ func (m *Mycelium) handleRecoverRequest(node *Node, request *db.RecoverRequest) 
 
 	raw.Signature, err = m.DB.KeyRing.Sign(raw.GetMessage())
 	if err != nil {
+		zap.L().Error("Unable to sign the spore",
+			zap.String("step", "recovery_proposal"),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -70,13 +76,22 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 
 	// Verify version
 	if version.New(raw.Data).Matches(raw.Version) != nil {
+		zap.L().Warn("Invalid recovery proposal",
+			zap.String("emitter", identity),
+			zap.String("step", "version"),
+		)
 		return
 	}
 
 	// Verify raw signature
 	err := m.DB.KeyRing.Verify(identity, raw.GetMessage(), raw.Signature)
 	if err != nil {
-		return // TODO log verification error
+		zap.L().Warn("Invalid recovery proposal",
+			zap.String("emitter", identity),
+			zap.String("step", "crypto"),
+			zap.Error(err),
+		)
+		return
 	}
 
 	r.answers[identity] = raw
@@ -131,6 +146,12 @@ func (m *Mycelium) StartRecovery(key string, quorum int) {
 		answers:  make(map[string]*protocol.Raw),
 		quorum:   quorum,
 	}
+
+	zap.L().Info("Starting partial recovery",
+		zap.String("key", key),
+		zap.Int("quorum", quorum),
+		zap.Time("deadline", m.recoveries[key].deadline),
+	)
 }
 
 // StopRecovery aborts a recovery process for the specified key.
@@ -138,10 +159,16 @@ func (m *Mycelium) StopRecovery(key string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	_, ok := m.recoveries[key]
+	r, ok := m.recoveries[key]
 	if !ok {
 		return
 	}
 
+	zap.L().Info("Aborting partial recovery",
+		zap.String("key", key),
+		zap.Int("quorum", r.quorum),
+		zap.Int("answers", len(r.answers)),
+		zap.Bool("aborted", r.deadline.Before(time.Now())),
+	)
 	delete(m.recoveries, key)
 }

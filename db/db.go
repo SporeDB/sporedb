@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/golang/protobuf/proto"
 	lru "github.com/hashicorp/golang-lru"
 
@@ -113,7 +115,7 @@ func (db *DB) Start(blocking bool) {
 // Stop asks the database to be gracefully stopped.
 func (db *DB) Stop() {
 	close(db.gc)
-	db.ticker.Stop()
+	//db.ticker.Stop()
 }
 
 // Get returns the currently stored data for the provided key.
@@ -158,7 +160,10 @@ func (db *DB) Apply(s *Spore) error {
 		i++
 	}
 
-	fmt.Println("Applying transaction", s.Uuid)
+	zap.L().Info("Applying transaction",
+		zap.Bool("application", true),
+		zap.String("uuid", s.Uuid),
+	)
 	return db.Store.SetBatch(keys, rawValues, versions)
 }
 
