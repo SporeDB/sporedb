@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"gitlab.com/SporeDB/sporedb/db/operations"
 
 	"github.com/golang/protobuf/ptypes/timestamp"
@@ -89,6 +91,11 @@ func (db *DB) Submit(s *Spore) (err error) {
 	s.Emitter, s.Signature = db.Identity, nil // ensure nil signature before hash
 	s.Signature, err = db.KeyRing.Sign(hashMessage(s))
 	if err != nil {
+		zap.L().Error("Unable to sign the spore",
+			zap.String("uuid", s.Uuid),
+			zap.String("step", "submission"),
+			zap.Error(err),
+		)
 		return err
 	}
 
@@ -147,7 +154,12 @@ func (db *DB) executeEndorsement(s *Spore) {
 	if endorser != nil {
 		signature, err := db.KeyRing.Sign(db.HashSpore(s))
 		if err != nil {
-			return // TODO log signature error
+			zap.L().Error("Unable to sign the spore",
+				zap.String("uuid", s.Uuid),
+				zap.String("step", "endorsement"),
+				zap.Error(err),
+			)
+			return
 		}
 
 		e := &Endorsement{
@@ -240,16 +252,34 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 
 	pub, _, err := db.KeyRing.GetPublic(emitter)
 	if err != nil {
+		zap.L().Warn("Invalid endorsement",
+			zap.String("uuid", e.Uuid),
+			zap.String("endorser", e.Emitter),
+			zap.String("step", "public"),
+			zap.Error(err),
+		)
 		return nil
 	}
 
 	// Allowed endorser?
 	if db.policies[trigger.spore.Policy].pubToEndorser(pub) == nil {
+		zap.L().Warn("Invalid endorsement",
+			zap.String("uuid", e.Uuid),
+			zap.String("endorser", e.Emitter),
+			zap.String("step", "policy"),
+			zap.Error(err),
+		)
 		return nil
 	}
 
 	// Well-formed signature?
 	if err = db.KeyRing.Verify(emitter, db.HashSpore(trigger.spore), e.Signature); err != nil {
+		zap.L().Warn("Invalid endorsement",
+			zap.String("uuid", e.Uuid),
+			zap.String("endorser", e.Emitter),
+			zap.String("step", "crypto"),
+			zap.Error(err),
+		)
 		return nil
 	}
 

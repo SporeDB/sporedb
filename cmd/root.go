@@ -3,6 +3,8 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var cfgFile *string
@@ -37,4 +39,29 @@ func initConfig() {
 	if !viper.IsSet("db.driver") {
 		viper.Set("db.driver", "boltdb")
 	}
+
+	// Init logging
+	logEncoder := zapcore.EncoderConfig{
+		TimeKey:        "T",
+		LevelKey:       "L",
+		CallerKey:      "C",
+		MessageKey:     "M",
+		StacktraceKey:  "S",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.StringDurationEncoder,
+	}
+
+	logConfig := zap.Config{
+		Level:            zap.NewAtomicLevelAt(zap.DebugLevel),
+		Development:      true,
+		Encoding:         "console",
+		EncoderConfig:    logEncoder,
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+	}
+
+	l, _ := logConfig.Build()
+	zap.ReplaceGlobals(l)
 }
