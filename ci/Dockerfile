@@ -6,7 +6,7 @@ RUN apt-get update && \
 # Install RocksDB
 
 RUN cd /tmp && \
-  git clone --depth 1 --branch 5.4.fb https://github.com/facebook/rocksdb.git && \
+  git clone --depth 1 --branch 5.6.fb https://github.com/facebook/rocksdb.git && \
   cd rocksdb && \
   PORTABLE=1 make shared_lib && \
   INSTALL_PATH=/usr make install-shared && \
@@ -15,7 +15,7 @@ RUN cd /tmp && \
 # Install Protoc
 
 RUN cd /tmp && \
-  git clone --branch 3.1.x --depth 1 https://github.com/google/protobuf.git && \
+  git clone --branch 3.3.x --depth 1 https://github.com/google/protobuf.git && \
   cd protobuf && \
   ./autogen.sh && \
   ./configure --prefix=/usr && \

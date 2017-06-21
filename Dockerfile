@@ -7,7 +7,7 @@ ARG rundeps="libsnappy-dev zlib1g-dev libbz2-dev"
 RUN cd /tmp && \
   apt-get update && \
   apt-get install -y $builddeps $rundeps && \
-  git clone --depth 1 --branch 5.4.fb https://github.com/facebook/rocksdb.git && \
+  git clone --depth 1 --branch 5.6.fb https://github.com/facebook/rocksdb.git && \
   cd rocksdb && \
   PORTABLE=1 make shared_lib && \
   INSTALL_PATH=/usr make install-shared && \

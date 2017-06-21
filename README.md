@@ -54,7 +54,7 @@ $ docker run --rm -it -e PASSWORD=******* -v $PWD:/sporedb registry.gitlab.com/s
 $ make install-bolt
 ```
 
-[RocksDB v5.4.x](https://github.com/facebook/rocksdb.git) is required to build SporeDB with RocksDB support (provides enhanced write performance):
+[RocksDB v5.6.x](https://github.com/facebook/rocksdb.git) is required to build SporeDB with RocksDB support (provides enhanced write performance):
 
 ```
 $ make
