@@ -31,6 +31,8 @@ const (
 	FnENDORSE                 = 0x03
 	FnRECOVERREQUEST          = 0x04
 	FnRAW                     = 0x05
+	FnGOSSIP                  = 0x06
+	FnNODES                   = 0x07
 )
 
 var fnTypes = map[Function]reflect.Type{
@@ -39,6 +41,8 @@ var fnTypes = map[Function]reflect.Type{
 	FnENDORSE:        reflect.TypeOf(db.Endorsement{}),
 	FnRECOVERREQUEST: reflect.TypeOf(db.RecoverRequest{}),
 	FnRAW:            reflect.TypeOf(Raw{}),
+	FnGOSSIP:         reflect.TypeOf(Gossip{}),
+	FnNODES:          reflect.TypeOf(Nodes{}),
 }
 
 // Call represents a package that can be sent across the mycelium network.

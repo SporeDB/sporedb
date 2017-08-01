@@ -1,3 +1,4 @@
+// Package sec provides security primitives for the SporeDB mycelium.
 package sec
 
 import (

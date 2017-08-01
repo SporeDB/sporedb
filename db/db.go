@@ -1,3 +1,4 @@
+// Package db provides main consensus and data processing engines.
 package db
 
 import (

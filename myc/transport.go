@@ -16,4 +16,4 @@ type conn interface {
 	SetHandshake(func() error)
 }
 
-type hookFn func(n *Node)
+type hookFn func(n *Peer)

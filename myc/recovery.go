@@ -19,7 +19,7 @@ type recovery struct {
 	stale    bool
 }
 
-func (m *Mycelium) handleRecoverRequest(node *Node, request *db.RecoverRequest) {
+func (m *Mycelium) handleRecoverRequest(peer *Peer, request *db.RecoverRequest) {
 	data, v, err := m.DB.Get(request.Key)
 	if err != nil {
 		return
@@ -49,7 +49,7 @@ func (m *Mycelium) handleRecoverRequest(node *Node, request *db.RecoverRequest) 
 		return
 	}
 
-	node.write <- rawMessage
+	peer.write <- rawMessage
 }
 
 func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {

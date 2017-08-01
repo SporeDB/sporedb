@@ -17,7 +17,7 @@ func Test_transportTCP(t *testing.T) {
 
 	// Start echo server
 	go func() {
-		_ = srv.Listen(p, func(n *Node) {
+		_ = srv.Listen(p, func(n *Peer) {
 			b := make([]byte, 64)
 			_, _ = n.conn.Read(b)
 			_, _ = n.conn.Write(b[:10])
@@ -27,7 +27,7 @@ func Test_transportTCP(t *testing.T) {
 			_ = n.conn.Close()
 
 			time.Sleep(3000 * time.Millisecond)
-			_ = srv2.Listen(p, func(nn *Node) {
+			_ = srv2.Listen(p, func(nn *Peer) {
 				_, _ = nn.conn.Write(b[10:])
 				_ = srv2.Close()
 			})

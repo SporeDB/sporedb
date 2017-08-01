@@ -1,3 +1,10 @@
+// Package client provides SporeDB API client.
+//
+// It can be used by external applications willing to communicate with a single SporeDB node.
+// The API client is able to get current state of one node's database, and submit transactions
+// to the whole SporeDB cluster.
+//
+// Please note that the API is under development and is subject to change.
 package client
 
 import (

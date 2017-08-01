@@ -1,3 +1,4 @@
+// Package myc contains the SporeDB mycelium logic.
 package myc
 
 import (
@@ -11,20 +12,21 @@ import (
 
 // Mycelium is the structure used to represent the SporeDB network of nodes.
 type Mycelium struct {
-	Peers []*Node
+	Peers []*Peer
 	DB    *db.DB
 
-	transport      transport
+	transport transport
+	mutex     sync.Mutex
+
 	recoveries     map[string]*recovery
-	mutex          sync.Mutex
 	recoveryQuorum int
 }
 
 // MyceliumConfig is the structure used to setup a new Mycelium.
 type MyceliumConfig struct {
-	Listen         string  // Peer API of this mycelium, might be empty to disable listenning.
-	Peers          []*Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
-	DB             *db.DB  // Related local database
+	Listen         string          // Peer API of this mycelium, might be empty to disable listenning.
+	Peers          []protocol.Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
+	DB             *db.DB          // Related local database
 	RecoveryQuorum int
 }
 
@@ -46,8 +48,8 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 
 	// Connect to peers asynchronously
 	for _, n := range c.Peers {
-		go func(n *Node) {
-			_ = m.Bind(n)
+		go func(n protocol.Node) {
+			_ = m.Bind(&Peer{Node: n})
 		}(n)
 	}
 
@@ -59,7 +61,7 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 
 // Bind binds the Mycelium to a new node.
 // It starts a listening routine for the node incoming messages.
-func (m *Mycelium) Bind(n *Node) error {
+func (m *Mycelium) Bind(n *Peer) error {
 	// Is already bound?
 	m.mutex.Lock()
 	for _, p := range m.Peers {
@@ -139,7 +141,7 @@ func (m *Mycelium) Close() error {
 
 // handler is called for each new incoming connection.
 // It starts a new listening routine.
-func (m *Mycelium) handler(n *Node) {
+func (m *Mycelium) handler(n *Peer) {
 	// Wait for HELLO message (server-side)
 	c := &protocol.Call{}
 	err := c.Unpack(n.conn)
@@ -180,7 +182,7 @@ func (m *Mycelium) handler(n *Node) {
 	fmt.Printf("Bound to %s (%s) in server mode\n", n.Address, n.Identity)
 }
 
-func (m *Mycelium) listener(n *Node) {
+func (m *Mycelium) listener(n *Peer) {
 	go n.emitter()
 	for !n.stopped {
 		c := &protocol.Call{}

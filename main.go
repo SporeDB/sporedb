@@ -1,3 +1,4 @@
+// Command sporedb is a decentralized and byzantine fault tolerant database client / server.
 package main
 
 import (

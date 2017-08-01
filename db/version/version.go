@@ -1,3 +1,4 @@
+// Package version holds spores version management internal logic.
 package version
 
 import (

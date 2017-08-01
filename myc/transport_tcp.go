@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"gitlab.com/SporeDB/sporedb/myc/protocol"
 )
 
 type transportTCP struct {
@@ -58,7 +60,10 @@ func (t *transportTCP) Listen(address string, hook hookFn) error {
 		}(c)
 
 		// Start hook routine
-		go hook(&Node{Address: c.RemoteAddr().String(), conn: c})
+		go hook(&Peer{
+			Node: protocol.Node{Address: c.RemoteAddr().String()},
+			conn: c,
+		})
 	}
 }
 

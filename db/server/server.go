@@ -1,4 +1,5 @@
-package api
+// Package server provides SporeDB API server.
+package server
 
 import (
 	"net"
