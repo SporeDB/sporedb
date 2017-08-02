@@ -45,6 +45,19 @@ var fnTypes = map[Function]reflect.Type{
 	FnNODES:          reflect.TypeOf(Nodes{}),
 }
 
+var fnString = map[Function]string{
+	FnSPORE:          "spore",
+	FnENDORSE:        "endorse",
+	FnRECOVERREQUEST: "recover",
+	FnRAW:            "raw",
+	FnGOSSIP:         "gossip",
+	FnNODES:          "nodes",
+}
+
+func (f Function) String() string {
+	return fnString[f]
+}
+
 // Call represents a package that can be sent across the mycelium network.
 type Call struct {
 	F Function

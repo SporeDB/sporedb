@@ -24,11 +24,7 @@ message Nodes {
 	repeated Node nodes = 1;
 }
 
-message GossipUnit {
-	string spore_uuid = 1;
-	string endorser = 2;
-}
-
 message Gossip {
-	repeated GossipUnit units = 1;
+	repeated string spores = 1;
+	bool request = 2;
 }

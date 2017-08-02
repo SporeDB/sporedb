@@ -11,20 +11,20 @@ type Peer struct {
 	stopped bool
 }
 
-func (n *Peer) emitter() {
-	for data := range n.write {
-		_, _ = n.conn.Write(data)
+func (p *Peer) emitter() {
+	for data := range p.write {
+		_, _ = p.conn.Write(data)
 	}
 }
 
 // Close properly shuts down node's connection.
-func (n *Peer) Close() error {
-	close(n.write)
-	n.stopped = true
-	return n.conn.Close()
+func (p *Peer) Close() error {
+	close(p.write)
+	p.stopped = true
+	return p.conn.Close()
 }
 
-// Equals is used to differentiate two nodes.
-func (n *Peer) Equals(n2 *Peer) bool {
-	return n.Node.Address == n2.Node.Address
+// Equals shall be used to compare two peers.
+func (p *Peer) Equals(p2 *Peer) bool {
+	return p.Node.Equals(p2.Node)
 }

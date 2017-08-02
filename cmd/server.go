@@ -102,7 +102,7 @@ var serverCmd = &cobra.Command{
 
 		fmt.Println("SporeDB is running on", viper.GetString("api.listen"))
 		database.Start(false)
-		_ = srv.Serve()
+		fmt.Println(srv.Serve())
 	},
 }
 

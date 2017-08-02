@@ -8,7 +8,6 @@ db:
     - policy.json
 
 mycelium:
-  listen: "localhost:4110"
   peers:
     - "localhost:4010"
 

@@ -161,8 +161,7 @@ func (db *DB) Apply(s *Spore) error {
 		i++
 	}
 
-	zap.L().Info("Applying transaction",
-		zap.Bool("application", true),
+	zap.L().Info("Apply",
 		zap.String("uuid", s.Uuid),
 	)
 	return db.Store.SetBatch(keys, rawValues, versions)
