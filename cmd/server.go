@@ -15,6 +15,7 @@ import (
 	"gitlab.com/SporeDB/sporedb/db/drivers/boltdb"
 	endpoint "gitlab.com/SporeDB/sporedb/db/server"
 	"gitlab.com/SporeDB/sporedb/myc"
+	"gitlab.com/SporeDB/sporedb/myc/protocol"
 )
 
 var recoverKeys *string
@@ -65,9 +66,9 @@ var serverCmd = &cobra.Command{
 		}
 
 		rawPeers := viper.GetStringSlice("mycelium.peers")
-		peers := make([]*myc.Node, len(rawPeers))
+		peers := make([]protocol.Node, len(rawPeers))
 		for i, p := range rawPeers {
-			peers[i] = &myc.Node{Address: p}
+			peers[i] = protocol.Node{Address: p}
 		}
 
 		mycelium, _ := myc.NewMycelium(&myc.MyceliumConfig{
@@ -101,7 +102,7 @@ var serverCmd = &cobra.Command{
 
 		fmt.Println("SporeDB is running on", viper.GetString("api.listen"))
 		database.Start(false)
-		_ = srv.Serve()
+		fmt.Println(srv.Serve())
 	},
 }
 

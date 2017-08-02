@@ -1,3 +1,4 @@
+// Package cmd provides SporeDB CLI interface.
 package cmd
 
 import (

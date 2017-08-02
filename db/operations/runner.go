@@ -1,3 +1,4 @@
+// Package operations contains database operations logic internals.
 package operations
 
 import "errors"

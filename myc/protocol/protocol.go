@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"reflect"
 
 	"gitlab.com/SporeDB/sporedb/db"
 
@@ -30,7 +31,32 @@ const (
 	FnENDORSE                 = 0x03
 	FnRECOVERREQUEST          = 0x04
 	FnRAW                     = 0x05
+	FnGOSSIP                  = 0x06
+	FnNODES                   = 0x07
 )
+
+var fnTypes = map[Function]reflect.Type{
+	FnHELLO:          reflect.TypeOf(Hello{}),
+	FnSPORE:          reflect.TypeOf(db.Spore{}),
+	FnENDORSE:        reflect.TypeOf(db.Endorsement{}),
+	FnRECOVERREQUEST: reflect.TypeOf(db.RecoverRequest{}),
+	FnRAW:            reflect.TypeOf(Raw{}),
+	FnGOSSIP:         reflect.TypeOf(Gossip{}),
+	FnNODES:          reflect.TypeOf(Nodes{}),
+}
+
+var fnString = map[Function]string{
+	FnSPORE:          "spore",
+	FnENDORSE:        "endorse",
+	FnRECOVERREQUEST: "recover",
+	FnRAW:            "raw",
+	FnGOSSIP:         "gossip",
+	FnNODES:          "nodes",
+}
+
+func (f Function) String() string {
+	return fnString[f]
+}
 
 // Call represents a package that can be sent across the mycelium network.
 type Call struct {
@@ -98,19 +124,11 @@ func (c *Call) Unpack(in InputStream) error {
 }
 
 func (c *Call) setUnpackRecipient() error {
-	switch c.F {
-	case FnHELLO:
-		c.M = &Hello{}
-	case FnSPORE:
-		c.M = &db.Spore{}
-	case FnENDORSE:
-		c.M = &db.Endorsement{}
-	case FnRECOVERREQUEST:
-		c.M = &db.RecoverRequest{}
-	case FnRAW:
-		c.M = &Raw{}
-	default:
+	t, ok := fnTypes[c.F]
+	if !ok {
 		return errors.New("invalid function")
 	}
+
+	c.M = reflect.New(t).Interface().(proto.Message)
 	return nil
 }

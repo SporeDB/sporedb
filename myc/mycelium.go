@@ -1,9 +1,12 @@
+// Package myc contains the SporeDB mycelium logic.
 package myc
 
 import (
-	"fmt"
 	"sync"
-	"time"
+
+	"go.uber.org/zap"
+
+	lru "github.com/hashicorp/golang-lru"
 
 	"gitlab.com/SporeDB/sporedb/db"
 	"gitlab.com/SporeDB/sporedb/myc/protocol"
@@ -11,31 +14,38 @@ import (
 
 // Mycelium is the structure used to represent the SporeDB network of nodes.
 type Mycelium struct {
-	Peers []*Node
+	Peers []*Peer
 	DB    *db.DB
 
 	transport      transport
+	mutex          sync.RWMutex
+	rContainer     requestsContainer
 	recoveries     map[string]*recovery
-	mutex          sync.Mutex
 	recoveryQuorum int
 }
 
 // MyceliumConfig is the structure used to setup a new Mycelium.
 type MyceliumConfig struct {
-	Listen         string  // Peer API of this mycelium, might be empty to disable listenning.
-	Peers          []*Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
-	DB             *db.DB  // Related local database
+	Listen         string          // Peer API of this mycelium, might be empty to disable listenning.
+	Peers          []protocol.Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
+	DB             *db.DB          // Related local database
 	RecoveryQuorum int
 }
 
 // NewMycelium setups a new Mycelium from its configuration.
 func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
+	// Allocate caches
+	rc, _ := lru.New(128)
+
+	// Build Mycelium
 	m := &Mycelium{
 		DB:             c.DB,
 		transport:      &transportTCP{},
+		rContainer:     requestsContainer{cache: rc},
 		recoveryQuorum: c.RecoveryQuorum,
 		recoveries:     make(map[string]*recovery),
 	}
+
 	if m.recoveryQuorum <= 0 {
 		m.recoveryQuorum = 2
 	}
@@ -46,8 +56,8 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 
 	// Connect to peers asynchronously
 	for _, n := range c.Peers {
-		go func(n *Node) {
-			_ = m.Bind(n)
+		go func(n protocol.Node) {
+			_ = m.Bind(&Peer{Node: n})
 		}(n)
 	}
 
@@ -57,9 +67,9 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 	return m, nil
 }
 
-// Bind binds the Mycelium to a new node.
+// Bind binds the Mycelium to a new peer.
 // It starts a listening routine for the node incoming messages.
-func (m *Mycelium) Bind(n *Node) error {
+func (m *Mycelium) Bind(n *Peer) error {
 	// Is already bound?
 	m.mutex.Lock()
 	for _, p := range m.Peers {
@@ -119,9 +129,13 @@ func (m *Mycelium) Bind(n *Node) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.Peers = append(m.Peers, n)
-	go m.listener(n)
+	go m.router(n)
 
-	fmt.Printf("Bound to %s (%s) in client mode\n", n.Address, n.Identity)
+	zap.L().Info("Peer",
+		zap.String("mode", "client"),
+		zap.String("address", n.Address),
+		zap.String("identity", n.Identity),
+	)
 	return nil
 }
 
@@ -139,7 +153,7 @@ func (m *Mycelium) Close() error {
 
 // handler is called for each new incoming connection.
 // It starts a new listening routine.
-func (m *Mycelium) handler(n *Node) {
+func (m *Mycelium) handler(n *Peer) {
 	// Wait for HELLO message (server-side)
 	c := &protocol.Call{}
 	err := c.Unpack(n.conn)
@@ -176,63 +190,10 @@ func (m *Mycelium) handler(n *Node) {
 
 	n.write = make(chan []byte, 64)
 	m.Peers = append(m.Peers, n)
-	go m.listener(n)
-	fmt.Printf("Bound to %s (%s) in server mode\n", n.Address, n.Identity)
-}
-
-func (m *Mycelium) listener(n *Node) {
-	go n.emitter()
-	for !n.stopped {
-		c := &protocol.Call{}
-		err := c.Unpack(n.conn)
-		if err != nil {
-			continue
-		}
-
-		switch c.F {
-		case protocol.FnSPORE:
-			_ = m.DB.Endorse(c.M.(*db.Spore))
-		case protocol.FnENDORSE:
-			e := c.M.(*db.Endorsement)
-			e.Retries = 20
-			m.DB.AddEndorsement(c.M.(*db.Endorsement))
-		case protocol.FnRECOVERREQUEST:
-			m.handleRecoverRequest(n, c.M.(*db.RecoverRequest))
-		case protocol.FnRAW:
-			m.handleRaw(n.Identity, c.M.(*protocol.Raw))
-		}
-	}
-}
-
-func (m *Mycelium) broadcaster() {
-	for message := range m.DB.Messages {
-		c := &protocol.Call{M: message}
-		if _, ok := message.(*db.Spore); ok {
-			c.F = protocol.FnSPORE
-		} else if _, ok := message.(*db.Endorsement); ok {
-			c.F = protocol.FnENDORSE
-		} else if r, ok := message.(*db.RecoverRequest); ok {
-			c.F = protocol.FnRECOVERREQUEST
-			m.StartRecovery(r.Key, m.recoveryQuorum)
-		} else {
-			continue
-		}
-
-		data, err := c.Pack()
-		if err != nil {
-			continue
-		}
-
-		m.mutex.Lock()
-		for len(m.Peers) == 0 { // No peer available, wait for broadcast retry
-			m.mutex.Unlock()
-			time.Sleep(5 * time.Second)
-			m.mutex.Lock()
-		}
-
-		for _, p := range m.Peers {
-			p.write <- data
-		}
-		m.mutex.Unlock()
-	}
+	go m.router(n)
+	zap.L().Info("Peer",
+		zap.String("mode", "server"),
+		zap.String("address", n.Address),
+		zap.String("identity", n.Identity),
+	)
 }

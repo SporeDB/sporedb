@@ -12,14 +12,16 @@ import (
 	"github.com/golang/protobuf/ptypes/timestamp"
 )
 
-// ErrDeadlineExpired is returned when a spore cannot be endorsed due to an expired deadline according to local clock.
-var ErrDeadlineExpired = errors.New("unable to endorse a spore with expired deadline")
+// Error messages
+var (
+	ErrDeadlineExpired        = errors.New("unable to endorse a spore with expired deadline")
+	ErrConflictingWithStaging = errors.New("unable to endorse a spore due to conflicting promise")
+	ErrBehindRequirement      = errors.New("unable to endorse a spore due to unfulfillable requirement")
 
-// ErrConflictingWithStaging is returned when a node cannot endorse a spore because it already has endorsed a conflicting spore.
-var ErrConflictingWithStaging = errors.New("unable to endorse a spore due to conflicting promise")
-
-// ErrBehindRequirement is returned when a node cannot endorse a spore due to unfulfillable requirement.
-var ErrBehindRequirement = errors.New("unable to endorse a spore due to unfulfillable requirement")
+	ErrNoRelatedSpore        = errors.New("unable to find related spore")
+	ErrDuplicatedEndorsement = errors.New("duplicated endorsement")
+	ErrUnallowedEndorser     = errors.New("unallowed endorser")
+)
 
 // CanEndorse checks wether a Spore can be endorsed or not regarding current database status.
 // It is thread-safe.
@@ -195,24 +197,16 @@ func (db *DB) executeEndorsement(s *Spore) {
 }
 
 // AddEndorsement registers the incoming endorsement.
-func (db *DB) AddEndorsement(e *Endorsement) {
-	if e.Retries == 0 {
-		return
+func (db *DB) AddEndorsement(e *Endorsement) error {
+	trigger, err := db.addEndorsementMap(e, db.staging, &db.stagingMutex)
+
+	if err != nil && err != ErrNoRelatedSpore {
+		return err
 	}
 
-	wtrigger := db.addEndorsementMap(e, db.waiting, &db.waitingMutex)
-	trigger := db.addEndorsementMap(e, db.staging, &db.stagingMutex)
-
 	if trigger == nil {
-		if wtrigger == nil {
-			// TODO use a "stagingEndorsement" map for better performances than pure retries
-			e.Retries--
-			time.AfterFunc(100*time.Millisecond, func() {
-				db.AddEndorsement(e)
-			})
-			return
-		}
-		return
+		_, werr := db.addEndorsementMap(e, db.waiting, &db.waitingMutex)
+		return werr
 	}
 
 	// Should we execute the spore?
@@ -225,22 +219,24 @@ func (db *DB) AddEndorsement(e *Endorsement) {
 		delete(db.staging, trigger.spore.Uuid)
 		go func() { _ = db.Apply(trigger.spore) }()
 	}
+
+	return nil
 }
 
-func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu sync.Locker) *dbTrigger {
+func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu sync.Locker) (*dbTrigger, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
 	// Spore being processed?
 	trigger, ok := ma[e.Uuid]
 	if !ok {
-		return nil
+		return nil, ErrNoRelatedSpore
 	}
 
 	// Already registered endorsement?
 	for _, e2 := range trigger.endorsements {
 		if e.Emitter == e2.Emitter {
-			return nil
+			return nil, ErrDuplicatedEndorsement
 		}
 	}
 
@@ -258,7 +254,7 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 			zap.String("step", "public"),
 			zap.Error(err),
 		)
-		return nil
+		return nil, err
 	}
 
 	// Allowed endorser?
@@ -269,7 +265,7 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 			zap.String("step", "policy"),
 			zap.Error(err),
 		)
-		return nil
+		return nil, ErrUnallowedEndorser
 	}
 
 	// Well-formed signature?
@@ -280,11 +276,11 @@ func (db *DB) addEndorsementMap(e *Endorsement, ma map[string]*dbTrigger, mu syn
 			zap.String("step", "crypto"),
 			zap.Error(err),
 		)
-		return nil
+		return nil, err
 	}
 
 	trigger.endorsements = append(trigger.endorsements, e)
-	return trigger
+	return trigger, nil
 }
 
 func deadlineToDuration(t *timestamp.Timestamp) time.Duration {

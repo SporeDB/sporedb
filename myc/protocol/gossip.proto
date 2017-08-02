@@ -14,3 +14,17 @@ message Raw {
 	bytes data = 3;
 	bytes signature = 10;
 }
+
+message Node {
+	string identity = 1;
+	string address = 2;
+}
+
+message Nodes {
+	repeated Node nodes = 1;
+}
+
+message Gossip {
+	repeated string spores = 1;
+	bool request = 2;
+}

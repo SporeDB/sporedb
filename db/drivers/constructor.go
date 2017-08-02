@@ -1,3 +1,4 @@
+// Package drivers holds required constructor for database drivers.
 package drivers
 
 import "gitlab.com/SporeDB/sporedb/db"

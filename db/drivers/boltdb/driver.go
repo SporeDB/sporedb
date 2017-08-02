@@ -1,3 +1,4 @@
+// Package boltdb provides the (default) BoldDB database driver.
 package boltdb
 
 import (

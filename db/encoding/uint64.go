@@ -1,3 +1,4 @@
+// Package encoding contains database types and (un)marshalling methods.
 package encoding
 
 import "encoding/binary"
