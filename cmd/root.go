@@ -55,12 +55,13 @@ func initConfig() {
 	}
 
 	logConfig := zap.Config{
-		Level:            zap.NewAtomicLevelAt(zap.DebugLevel),
-		Development:      true,
-		Encoding:         "console",
-		EncoderConfig:    logEncoder,
-		OutputPaths:      []string{"stderr"},
-		ErrorOutputPaths: []string{"stderr"},
+		Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
+		Development:       true,
+		DisableStacktrace: true,
+		Encoding:          "console",
+		EncoderConfig:     logEncoder,
+		OutputPaths:       []string{"stderr"},
+		ErrorOutputPaths:  []string{"stderr"},
 	}
 
 	l, _ := logConfig.Build()

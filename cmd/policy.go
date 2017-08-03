@@ -7,6 +7,8 @@ import (
 	"path"
 	"strconv"
 
+	"go.uber.org/zap"
+
 	"github.com/golang/protobuf/jsonpb"
 	uuid "github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
@@ -107,6 +109,8 @@ func loadPolicies(database *db.DB) {
 			continue
 		}
 
-		fmt.Println("Successfully loaded policy", policy.Uuid)
+		zap.L().Info("Loaded policy",
+			zap.String("uuid", policy.Uuid),
+		)
 	}
 }
