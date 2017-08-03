@@ -5,6 +5,7 @@ import (
 
 	"gitlab.com/SporeDB/sporedb/db/version"
 
+	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/satori/go.uuid"
 )
@@ -50,4 +51,17 @@ func (s *Spore) checkDeadline() bool {
 	}
 
 	return s.Deadline.Seconds >= time.Now().Unix()
+}
+
+func (s *Spore) checkGracePeriod(grace *duration.Duration) (bool, time.Time) {
+	if s.Deadline == nil {
+		return true, time.Unix(0, 0)
+	}
+
+	if grace == nil {
+		grace = &duration.Duration{}
+	}
+
+	unixTime := s.Deadline.Seconds + grace.Seconds
+	return unixTime >= time.Now().Unix(), time.Unix(unixTime, 0)
 }

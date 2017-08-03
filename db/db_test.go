@@ -79,6 +79,13 @@ func TestDB_Single_Quorum1(t *testing.T) {
 	value, _, err = db.Get("keyB")
 	require.Nil(t, err)
 	require.Exactly(t, []byte("5.42"), value)
+
+	require.Len(t, db.applied, 1)
+
+	require.Error(t, ErrDuplicatedApplication, db.Apply(s), "must not double apply a spore")
+
+	time.Sleep(time.Second)
+	require.Error(t, ErrGracePeriodExpired, db.Apply(s), "must detect grace period expiration")
 }
 
 func TestDB_Single_Quorum2(t *testing.T) {
