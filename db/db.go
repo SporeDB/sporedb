@@ -3,7 +3,6 @@ package db
 
 import (
 	"crypto/sha512"
-	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -20,9 +19,21 @@ import (
 
 // DB is the main structure for database management of a node.
 type DB struct {
-	Store    Store
+	// Store is the underlying database storage engine.
+	Store Store
+
+	// Identity is the identity of the local node.
+	// It should be unique.
 	Identity string
-	KeyRing  sec.KeyRing
+
+	// KeyRing is the key management structure, used to
+	// sign and verify endorsements and spores.
+	KeyRing sec.KeyRing
+
+	// Messages is the output port of the consensus algorithm.
+	// It emits various messages, like new Spores or Endorsements.
+	//
+	// See gitlab.com/SporeDB/sporedb/myc/protocol
 	Messages chan proto.Message
 
 	// Policy management
@@ -30,14 +41,32 @@ type DB struct {
 	policiesReg map[string][]*regexp.Regexp
 
 	// Spore flow management
-	staging      map[string]*dbTrigger
-	stagingMutex sync.RWMutex
-	waiting      map[string]*dbTrigger
+	//
+	// Those 3 maps are the basic blocks of the SporeDB consensus algorithm.
+	//
+	// * `waiting` contains spores that are conflicting with one or more spores
+	//   in `staging`. They are either dropped or promoted to `staging`, depending
+	//   on the fate of their conflicting peers ;
+	//
+	// * `staging` contains spores that have been validated, but requires more
+	//    endorsements to be trusted. They are either dropped or promoted to
+	//    `applied`.
+	//
+	// * `applied` contains grace-period information about Spores that have been applied
+	//   recently. When the grace-period is over, Spores are removed to free-up some
+	//   space.
+	//
+	waiting map[string]*dbTrigger
+	staging map[string]*dbTrigger
+	applied map[string]time.Time
+
+	// Paralellism management
 	waitingMutex sync.RWMutex
+	stagingMutex sync.RWMutex
+	appliedMutex sync.Mutex
 	cache        *lru.Cache
 	gc           chan *Spore
-
-	ticker *time.Ticker
+	cleanTicker  *time.Ticker
 }
 
 type dbTrigger struct {
@@ -58,6 +87,7 @@ func NewDB(s Store, identity string, keyring sec.KeyRing) *DB {
 		policiesReg: make(map[string][]*regexp.Regexp),
 		staging:     make(map[string]*dbTrigger),
 		waiting:     make(map[string]*dbTrigger),
+		applied:     make(map[string]time.Time),
 		cache:       c,
 		gc:          make(chan *Spore),
 	}
@@ -78,9 +108,15 @@ func (db *DB) AddPolicy(p *Policy) error {
 // It can either work in blocking or non-blocking modes.
 func (db *DB) Start(blocking bool) {
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 
-	// go db.debugRoutine()
+	db.cleanTicker = time.NewTicker(60 * time.Second)
+	go func() {
+		for range db.cleanTicker.C {
+			db.Clean()
+		}
+		wg.Done()
+	}()
 
 	go func() {
 		for s := range db.gc {
@@ -104,7 +140,6 @@ func (db *DB) Start(blocking bool) {
 
 			db.waitingMutex.Unlock()
 		}
-
 		wg.Done()
 	}()
 
@@ -116,7 +151,7 @@ func (db *DB) Start(blocking bool) {
 // Stop asks the database to be gracefully stopped.
 func (db *DB) Stop() {
 	close(db.gc)
-	//db.ticker.Stop()
+	db.cleanTicker.Stop()
 }
 
 // Get returns the currently stored data for the provided key.
@@ -128,6 +163,26 @@ func (db *DB) Get(key string) ([]byte, *version.V, error) {
 func (db *DB) Apply(s *Spore) error {
 	db.Store.Lock()
 	defer db.Store.Unlock()
+
+	db.appliedMutex.Lock()
+	defer db.appliedMutex.Unlock()
+
+	policy := db.policies[s.Policy]
+	ok, unixTime := s.checkGracePeriod(policy.GracePeriod)
+	if !ok {
+		zap.L().Warn("Grace period expired",
+			zap.String("uuid", s.Uuid),
+			zap.Time("death", unixTime),
+		)
+		return ErrGracePeriodExpired
+	}
+
+	if _, ok := db.applied[s.Uuid]; ok {
+		zap.L().Warn("Double application attempt",
+			zap.String("uuid", s.Uuid),
+		)
+		return ErrDuplicatedApplication
+	}
 
 	values := make(map[string]*operations.Value)
 
@@ -164,7 +219,32 @@ func (db *DB) Apply(s *Spore) error {
 	zap.L().Info("Apply",
 		zap.String("uuid", s.Uuid),
 	)
-	return db.Store.SetBatch(keys, rawValues, versions)
+	err := db.Store.SetBatch(keys, rawValues, versions)
+	if err != nil {
+		zap.L().Error("Application error",
+			zap.String("uuid", s.Uuid),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	db.applied[s.Uuid] = unixTime
+	return nil
+}
+
+// Clean is periodically called to free-up memory related to old transactions.
+func (db *DB) Clean() {
+	db.appliedMutex.Lock()
+	defer db.appliedMutex.Unlock()
+
+	unixZero := time.Unix(0, 0)
+	now := time.Now()
+
+	for uuid, death := range db.applied {
+		if death.After(unixZero) && death.After(now) {
+			delete(db.applied, uuid)
+		}
+	}
 }
 
 // HashSpore process one spore's hash.
@@ -178,13 +258,6 @@ func (db *DB) HashSpore(s *Spore) []byte {
 	newHash := hashMessage(s)
 	go db.cache.Add(s.Uuid, newHash)
 	return newHash
-}
-
-func (db *DB) debugRoutine() {
-	db.ticker = time.NewTicker(time.Second)
-	for range db.ticker.C {
-		fmt.Printf("| Waiting:%d | Staging:%d |\n", len(db.waiting), len(db.staging))
-	}
 }
 
 func hashMessage(message proto.Message) []byte {

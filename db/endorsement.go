@@ -21,6 +21,9 @@ var (
 	ErrNoRelatedSpore        = errors.New("unable to find related spore")
 	ErrDuplicatedEndorsement = errors.New("duplicated endorsement")
 	ErrUnallowedEndorser     = errors.New("unallowed endorser")
+
+	ErrGracePeriodExpired    = errors.New("unable to apply a spore with expired grace period")
+	ErrDuplicatedApplication = errors.New("duplicated application")
 )
 
 // CanEndorse checks wether a Spore can be endorsed or not regarding current database status.
