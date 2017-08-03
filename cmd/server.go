@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"strings"
 
+	"go.uber.org/zap"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -83,7 +85,9 @@ var serverCmd = &cobra.Command{
 				continue
 			}
 
-			fmt.Println("Sending recovery request for key `" + key + "`")
+			zap.L().Info("Recovery request",
+				zap.String("key", key),
+			)
 			database.Messages <- &db.RecoverRequest{Key: key}
 		}
 
@@ -100,9 +104,20 @@ var serverCmd = &cobra.Command{
 			}
 		}()
 
-		fmt.Println("SporeDB is running on", viper.GetString("api.listen"))
+		zap.L().Info("Listening",
+			zap.String("type", "API"),
+			zap.String("address", viper.GetString("api.listen")),
+		)
+
 		database.Start(false)
-		fmt.Println(srv.Serve())
+		err = srv.Serve()
+
+		if err != nil {
+			zap.L().Error("Unable to listen",
+				zap.String("type", "API"),
+				zap.Error(err),
+			)
+		}
 	},
 }
 

@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"go.uber.org/zap"
+
 	"gitlab.com/SporeDB/sporedb/myc/protocol"
 )
 
@@ -14,17 +16,12 @@ type transportTCP struct {
 }
 
 func (t *transportTCP) Bind(address string) (conn, error) {
-	a, err := net.ResolveTCPAddr("tcp", address)
-	if err != nil {
-		return nil, err
-	}
-
 	c := &connTCP{
 		connChan: make(chan error),
 		errChan:  make(chan error),
 	}
 
-	go c.Connect(a)
+	go c.connect(address)
 	return c, <-c.connChan
 }
 
@@ -91,15 +88,34 @@ func (c *connTCP) Close() error {
 	return nil
 }
 
-func (c *connTCP) Connect(address *net.TCPAddr) {
+func (c *connTCP) connect(address string) {
 	var err error
+
+	dialer := net.Dialer{
+		DualStack: true,
+		KeepAlive: 10 * time.Second,
+	}
+
+	var conn net.Conn
+
 	for open := true; open; _, open = <-c.errChan {
-		c.TCPConn, err = net.DialTCP("tcp", nil, address)
+		conn, err = dialer.Dial("tcp", address)
+		c.TCPConn, _ = conn.(*net.TCPConn)
 		c.connChan <- nil
 		if err != nil {
+			zap.L().Warn("Disconnected",
+				zap.String("transport", "tcp"),
+				zap.String("address", address),
+				zap.Error(err),
+			)
 			time.Sleep(time.Second)
 			continue
 		}
+
+		zap.L().Info("Connected",
+			zap.String("transport", "tcp"),
+			zap.String("address", address),
+		)
 
 		if c.handshake != nil {
 			_ = c.handshake()

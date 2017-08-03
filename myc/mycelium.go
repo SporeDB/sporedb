@@ -51,7 +51,19 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 	}
 
 	if c.Listen != "" {
-		go func() { _ = m.transport.Listen(c.Listen, m.handler) }()
+		go func() {
+			zap.L().Info("Listening",
+				zap.String("type", "P2P"),
+				zap.String("address", c.Listen),
+			)
+			lerr := m.transport.Listen(c.Listen, m.handler)
+			if lerr != nil {
+				zap.L().Error("Unable to listen",
+					zap.String("type", "P2P"),
+					zap.Error(lerr),
+				)
+			}
+		}()
 	}
 
 	// Connect to peers asynchronously
@@ -131,7 +143,7 @@ func (m *Mycelium) Bind(n *Peer) error {
 	m.Peers = append(m.Peers, n)
 	go m.router(n)
 
-	zap.L().Info("Peer",
+	zap.L().Info("Bound",
 		zap.String("mode", "client"),
 		zap.String("address", n.Address),
 		zap.String("identity", n.Identity),
@@ -191,7 +203,7 @@ func (m *Mycelium) handler(n *Peer) {
 	n.write = make(chan []byte, 64)
 	m.Peers = append(m.Peers, n)
 	go m.router(n)
-	zap.L().Info("Peer",
+	zap.L().Info("Bound",
 		zap.String("mode", "server"),
 		zap.String("address", n.Address),
 		zap.String("identity", n.Identity),
