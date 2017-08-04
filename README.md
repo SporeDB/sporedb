@@ -16,6 +16,8 @@ This strong coordination reduces scalability and performance of the global syste
 
 We introduce SporeDB as a way to solve these problems using simple (but powerful) techniques.
 
+*To help the development effort, Bitcoin donations are welcome at `146VpSS56tkvt2ZSXLpwYBjjPR2grf5P9N`. Thanks!*
+
 ## Overview
 
 The SporeDB architecture is represented in the following figure :
