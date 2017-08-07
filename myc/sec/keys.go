@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -13,10 +14,10 @@ type TrustLevel byte
 
 // TrustLevel available values.
 const (
-	TrustNONE TrustLevel = iota
-	TrustLOW
-	TrustHIGH
-	TrustULTIMATE
+	TrustNONE     TrustLevel = 0x00
+	TrustLOW      TrustLevel = 0x01
+	TrustHIGH     TrustLevel = 0x03
+	TrustULTIMATE TrustLevel = 0xff
 )
 
 var trustName = map[TrustLevel]string{
@@ -39,18 +40,37 @@ func ParseTrust(trust string) (TrustLevel, error) {
 }
 
 func (t TrustLevel) String() string {
-	return trustName[t]
+	str, ok := trustName[t]
+	if ok {
+		return str
+	}
+
+	return strconv.Itoa(int(t))
 }
 
-// TrustValue converts a TrustLevel to its value to be compared to TrustThreshold.
-var TrustValue = map[TrustLevel]int{
-	TrustLOW:      1,
-	TrustHIGH:     2,
-	TrustULTIMATE: 99,
+// Min returns the minimum value between two TrustLevels.
+func (t TrustLevel) Min(t2 TrustLevel) TrustLevel {
+	if t < t2 {
+		return t
+	}
+	return t2
+}
+
+// Add returns a safe addition between two TrustLevels.
+func (t TrustLevel) Add(t2 TrustLevel) TrustLevel {
+	if t == TrustULTIMATE || t2 == TrustULTIMATE {
+		return TrustULTIMATE
+	}
+
+	if t >= TrustThreshold || t2 >= TrustThreshold {
+		return TrustThreshold
+	}
+
+	return t + t2
 }
 
 // TrustThreshold is the default required TrustLevel for a verification operation.
-var TrustThreshold = 2
+var TrustThreshold = TrustHIGH
 
 const (
 	pemPublicType  = "SPOREDB PUBLIC KEY"
