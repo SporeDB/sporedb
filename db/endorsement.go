@@ -50,11 +50,13 @@ func (db *DB) CanEndorse(s *Spore) error {
 	}
 
 	values := make(map[string]*operations.Value)
+	var oldSize uint64
 
 	for _, op := range s.Operations {
 		v, ok := values[op.Key]
 		if !ok {
 			d, _, _ := db.Store.Get(op.Key)
+			oldSize += uint64(len(d))
 			values[op.Key] = operations.NewValue(d)
 			v = values[op.Key]
 		}
@@ -71,7 +73,13 @@ func (db *DB) CanEndorse(s *Spore) error {
 			return err
 		}
 	}
+
 	db.Store.Unlock()
+
+	err := db.checkCurrentPolicyUsage(oldSize, s.Policy, values)
+	if err != nil {
+		return err
+	}
 
 	// Promise: Check for conflicts with staging
 	return db.checkConflictWithStaging(s)
