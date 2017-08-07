@@ -18,9 +18,10 @@ type KeyEd25519 struct {
 	Public     ed25519.PublicKey
 	Signatures map[string]*Signature
 
-	identity string
-	signedBy []*KeyEd25519
-	trust    TrustLevel
+	identity       string
+	signedBy       []*KeyEd25519
+	trust          TrustLevel // set by user
+	effectiveTrust TrustLevel // computed from web of trust, >= trust
 }
 
 // Info shall be used to get basic informations about this key.
@@ -28,12 +29,17 @@ func (k *KeyEd25519) Info() (identity string, data []byte, trust TrustLevel) {
 	return k.identity, k.Public, k.trust
 }
 
-// KeyRingEd25519 is a KeyRing saving data as PEM, and using the Ed25519 high-speed high-security signatures algorithm.
+// KeyRingEd25519 is a KeyRing saving data as PEM, and using the Ed25519
+// high-speed high-security signatures algorithm.
+//
+// This KeyRing also provides a lazy web of trust computation feature,
+// similar to PGP's web of trust.
 type KeyRingEd25519 struct {
 	mutex         sync.RWMutex
 	keys          map[string]*KeyEd25519
 	secret        ed25519.PrivateKey
 	armoredSecret *pem.Block
+	stale         bool
 }
 
 // NewKeyRingEd25519 instanciates a new KeyRingEd25519.
@@ -42,8 +48,9 @@ func NewKeyRingEd25519() *KeyRingEd25519 {
 	return &KeyRingEd25519{
 		keys: map[string]*KeyEd25519{
 			"": &KeyEd25519{
-				trust:      TrustULTIMATE,
-				Signatures: make(map[string]*Signature),
+				trust:          TrustULTIMATE,
+				effectiveTrust: TrustULTIMATE,
+				Signatures:     make(map[string]*Signature),
 			},
 		},
 	}
@@ -101,12 +108,12 @@ func (k *KeyRingEd25519) AddPublic(identity string, trust TrustLevel, data []byt
 	if !bytes.Equal(key.Public, data) {
 		key.Public = make([]byte, ed25519.PublicKeySize)
 		key.Signatures = make(map[string]*Signature)
-		key.signedBy = nil
 		copy(key.Public, data)
 	}
 
 	key.identity = identity
 	key.trust = trust
+	k.stale = true
 	return
 }
 
@@ -148,167 +155,14 @@ func (k *KeyRingEd25519) GetPublic(identity string) (data []byte, trust TrustLev
 // RemovePublic removes a key from the KeyRing.
 // This function is thread-safe.
 func (k *KeyRingEd25519) RemovePublic(identity string) {
-	k.mutex.Lock()
-	defer k.mutex.Unlock()
-
-	key, ok := k.keys[identity]
-	if !ok || identity == "" {
+	if identity == "" {
 		return
 	}
 
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
 	delete(k.keys, identity)
-
-	// Remove remote signatures
-	for _, signed := range k.keys {
-		for i, key2 := range signed.signedBy {
-			if key == key2 {
-				signed.signedBy = append(signed.signedBy[:i], signed.signedBy[i+1:]...)
-				break
-			}
-		}
-	}
-}
-
-// GetSignatures returns a map of (signer, signatures) where the provided identity is the signee.
-// This function is thread-safe.
-func (k *KeyRingEd25519) GetSignatures(identity string) map[string]*Signature {
-	k.mutex.RLock()
-	defer k.mutex.RUnlock()
-
-	key, ok := k.keys[identity]
-	if !ok {
-		return nil
-	}
-
-	// Copy map
-	signatures := make(map[string]*Signature)
-	for _, signer := range key.signedBy {
-		signatures[signer.identity] = signer.Signatures[identity]
-	}
-
-	return signatures
-}
-
-// AddSignature adds a signature to the identity, from signer "from".
-// If "from" equals the empty string, the KeyRing adds a new signature to the identity using its own private key.
-//
-// It may returns ErrKeyRingLocked or ErrUnknownIdentity.
-//
-// This function is thread-safe.
-func (k *KeyRingEd25519) AddSignature(identity, from string, signature *Signature) error {
-	k.mutex.RLock()
-	key, ok := k.keys[identity]
-	signer := k.keys[from] // Safe, non-nil values shall be verified in k.verifySignature
-	k.mutex.RUnlock()
-
-	if !ok {
-		return &ErrUnknownIdentity{I: identity}
-	}
-
-	if from == "" { // emit local signature
-		message := append(key.Public, byte(key.trust))
-		signData, err := k.Sign(message)
-		if err != nil {
-			return err
-		}
-
-		signature = &Signature{
-			Data:  signData,
-			Trust: key.trust,
-		}
-	} else { // verify third-party signature
-		if err := k.verifySignature(from, key, signature); err != nil {
-			return err
-		}
-	}
-
-	k.mutex.Lock()
-	defer k.mutex.Unlock()
-
-	key.signedBy = append(key.signedBy, signer)
-	signer.Signatures[identity] = signature
-	return nil
-}
-
-func (k *KeyRingEd25519) verifySignature(signer string, signee *KeyEd25519, signature *Signature) error {
-	message := append(signee.Public, byte(signature.Trust))
-	return k.Verify(signer, message, signature.Data)
-}
-
-// Sign signs the message with the unlocked private key.
-// This function is thread-safe.
-func (k *KeyRingEd25519) Sign(cleartext []byte) (signature []byte, err error) {
-	if k.Locked() {
-		err = ErrKeyRingLocked
-		return
-	}
-
-	signature = ed25519.Sign(k.secret, cleartext)
-	return
-}
-
-// Verify checks the message signed by "from".
-// The addition of local trust and third-party trust levels must be greater or equals than TrustThreshold.
-//
-// It may returns ErrUnknownIdentity, ErrInsufficientTrust or ErrInvalidSignature.
-//
-// This function is thread-safe.
-func (k *KeyRingEd25519) Verify(from string, cleartext, signature []byte) error {
-	k.mutex.RLock()
-	defer k.mutex.RUnlock()
-
-	key, ok := k.keys[from]
-	if !ok {
-		return &ErrUnknownIdentity{I: from}
-	}
-
-	err := k.trustedUnsafe(key)
-	if err != nil {
-		return err
-	}
-
-	ok = ed25519.Verify(key.Public, cleartext, signature)
-	if !ok {
-		return ErrInvalidSignature
-	}
-
-	return nil
-}
-
-// Trusted shall return nil if an identity is currently trusted by the keyring.
-//
-// It may returns ErrUnknownIdentity or ErrInsufficientTrust.
-//
-// This function is thread-safe.
-func (k *KeyRingEd25519) Trusted(identity string) error {
-	k.mutex.RLock()
-	defer k.mutex.RUnlock()
-
-	key, ok := k.keys[identity]
-	if !ok {
-		return &ErrUnknownIdentity{I: identity}
-	}
-
-	return k.trustedUnsafe(key)
-}
-
-// TODO : secure this function
-func (k *KeyRingEd25519) trustedUnsafe(key *KeyEd25519) error {
-	lvl := TrustValue[key.trust]
-	for _, signer := range key.signedBy {
-		a := TrustValue[signer.trust]
-		b := TrustValue[signer.Signatures[key.identity].Trust]
-		if b < a {
-			lvl += b
-		} else {
-			lvl += a
-		}
-	}
-
-	if lvl < TrustThreshold {
-		return &ErrInsufficientTrust{I: key.identity, L: lvl}
-	}
-	return nil
+	k.stale = true
 }
 
 // Export exports a public key to a PEM block.
@@ -433,6 +287,7 @@ func (k *KeyRingEd25519) importUnsafe(data []byte, identity string, trust TrustL
 		k.keys[key.identity] = key
 	}
 
+	k.stale = true
 	return
 }
 
@@ -445,19 +300,6 @@ func (k *KeyRingEd25519) UnmarshalBinary(data []byte) error {
 
 	for len(buffer) > 0 && err != io.EOF {
 		buffer, err = k.importUnsafe(buffer, "", 0)
-	}
-
-	// Populate signedBy slices
-	for _, key := range k.keys {
-		for signee, signature := range key.Signatures {
-			signeeKey, ok := k.keys[signee]
-			if ok {
-				// Check the signature
-				if k.verifySignature(key.identity, signeeKey, signature) == nil {
-					signeeKey.signedBy = append(signeeKey.signedBy, key)
-				} // TODO better handling of dependency tree
-			}
-		}
 	}
 
 	return nil

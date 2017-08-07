@@ -116,6 +116,7 @@ func TestEd25519_SignVerify(t *testing.T) {
 	k1.secret = getTestKeyPairEd25519("sec", 0)
 
 	k2 := NewKeyRingEd25519()
+	k2.stale = true
 	k2.keys["k1"] = &KeyEd25519{
 		Public:   getTestKeyPairEd25519("pub", 0),
 		identity: "k1",
@@ -138,10 +139,10 @@ func TestEd25519_SignVerify(t *testing.T) {
 				Public:   getTestKeyPairEd25519("pub", 0),
 				identity: "k1",
 				trust:    TrustNONE,
-				signedBy: []*KeyEd25519{key2},
 			},
 			"k2": key2,
 		},
+		stale: true,
 	}
 
 	message := []byte("Hello World!")
@@ -202,7 +203,6 @@ func TestEd25519_AddGetSignature(t *testing.T) {
 
 	require.Nil(t, k1.AddSignature("k2", "", nil))
 	signatures := k1.GetSignatures("k2")
-	require.NotNil(t, signatures, "expect at least one local signature")
 	require.Len(t, signatures, 1, "expect exactly one signature")
 	require.Exactly(t, TrustNONE, signatures[""].Trust)
 
@@ -332,7 +332,7 @@ func TestEd25519_Unmarshal(t *testing.T) {
 
 	signatures := k.GetSignatures("k0")
 	require.NotNil(t, signatures[""], "should retrieve local signatures")
-	require.Exactly(t, signatures[""].Trust, TrustHIGH, "should retrieve local trust levels in signatures")
+	require.Exactly(t, signatures[""].Trust, TrustLevel(0x02), "should retrieve local trust levels in signatures")
 
 	signatures = k.GetSignatures("k2")
 	require.NotNil(t, signatures["k0"], "should retrieve third-party signatures")
