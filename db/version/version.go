@@ -26,7 +26,7 @@ func New(data []byte) *V {
 
 // Matches returns an error is two versions are not matching.
 func (v *V) Matches(v2 *V) error {
-	if v2 == nil {
+	if v == nil || v2 == nil {
 		return errors.New("only accepts non-nil version")
 	}
 
@@ -38,11 +38,19 @@ func (v *V) Matches(v2 *V) error {
 
 // MarshalBinary converts the version to a VersionBytes-sized bytes slice.
 func (v *V) MarshalBinary() (data []byte, err error) {
+	if v == nil {
+		return make([]byte, VersionBytes), nil
+	}
+
 	return v.Hash, nil
 }
 
 // UnmarshalBinary converts the input to a version.
 func (v *V) UnmarshalBinary(data []byte) error {
+	if v == nil {
+		return nil
+	}
+
 	v.Hash = make([]byte, len(data))
 	copy(v.Hash, data)
 	return nil

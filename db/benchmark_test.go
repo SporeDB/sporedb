@@ -1,9 +1,6 @@
 package db
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func genericDBBench(b *testing.B, op Operation_Op) {
 	db, done := getTestingDB(&testing.T{})
@@ -12,21 +9,23 @@ func genericDBBench(b *testing.B, op Operation_Op) {
 	db.Start(false)
 
 	b.ResetTimer()
-	t := 100 * time.Millisecond
 
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
 			i++
-			s := NewSpore()
-			s.SetTimeout(t)
+			s, sign := getTestSpore(db)
 			s.Operations = []*Operation{{
 				Key:  "key",
 				Op:   op,
 				Data: []byte("1"),
 			}}
+			sign()
 
-			_ = db.Endorse(s)
+			err := db.Endorse(s)
+			if err != nil {
+				panic(err)
+			}
 		}
 	})
 }

@@ -98,6 +98,9 @@ func TestDB_Single_Quorum2(t *testing.T) {
 
 	// Change policy to force Quorum
 	db.policies["none"].Quorum = 2
+	defer func() {
+		db.policies["none"].Quorum = 0
+	}()
 
 	db.Start(false)
 

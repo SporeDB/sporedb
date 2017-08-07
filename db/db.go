@@ -185,6 +185,7 @@ func (db *DB) Apply(s *Spore) error {
 	}
 
 	values := make(map[string]*operations.Value)
+	var oldSize, newSize uint64
 
 	for _, op := range s.Operations {
 		value, ok := values[op.Key]
@@ -194,6 +195,7 @@ func (db *DB) Apply(s *Spore) error {
 				return err
 			}
 
+			oldSize += uint64(len(data))
 			values[op.Key] = operations.NewValue(data)
 			value = values[op.Key]
 		}
@@ -204,17 +206,20 @@ func (db *DB) Apply(s *Spore) error {
 		}
 	}
 
-	keys := make([]string, len(values))
-	rawValues := make([][]byte, len(values))
-	versions := make([]*version.V, len(values))
+	keys := make([]string, len(values)+1)
+	rawValues := make([][]byte, len(values)+1)
+	versions := make([]*version.V, len(values)+1)
 
-	var i int
+	i := 1
 	for k, v := range values {
 		keys[i] = k
 		rawValues[i] = v.Raw
 		versions[i] = version.New(v.Raw)
+		newSize += uint64(len(v.Raw))
 		i++
 	}
+
+	keys[0], rawValues[0] = db.updatePolicyUsage(oldSize, newSize, s.Policy)
 
 	zap.L().Info("Apply",
 		zap.String("uuid", s.Uuid),

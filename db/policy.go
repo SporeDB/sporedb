@@ -4,17 +4,24 @@ import (
 	"bytes"
 	"errors"
 	"regexp"
+	"strings"
 
+	"gitlab.com/SporeDB/sporedb/db/encoding"
 	"gitlab.com/SporeDB/sporedb/db/operations"
 )
 
 // Error messages for policy.
 var (
-	ErrUnknownPolicy = errors.New("the requested policy is unknown")
-	ErrOpTooLarge    = errors.New("the requested operation is too large for the policy")
-	ErrOpNotAllowed  = errors.New("the requested operation is not allowed by the policy")
-	ErrOpDisabledKey = errors.New("the requested key is not modifiable according to the policy")
+	ErrUnknownPolicy       = errors.New("the requested policy is unknown")
+	ErrOpTooLarge          = errors.New("the requested operation is too large for the policy")
+	ErrOpNotAllowed        = errors.New("the requested operation is not allowed by the policy")
+	ErrOpDisabledKey       = errors.New("the requested key is not modifiable according to the policy")
+	ErrPolicyQuotaExceeded = errors.New("unable to endorse a spore due to policy quota reached")
+	ErrOpSystemKey         = errors.New("the requested key has been reserved for internal use")
 )
+
+const internalKeyPrefix = "__internal"
+const globalPolicySizeKeyPrefix = internalKeyPrefix + "/size"
 
 // NonePolicy is a basic policy used for testing and development.
 var NonePolicy = &Policy{
@@ -32,7 +39,9 @@ func (db *DB) Check(policy string, o *Operation, value *operations.Value) error 
 		return ErrUnknownPolicy
 	}
 
-	// TODO check global size
+	if strings.HasPrefix(o.Key, internalKeyPrefix) {
+		return ErrOpSystemKey
+	}
 
 	// Check simulation size
 	l := uint64(len(value.Raw))
@@ -43,9 +52,6 @@ func (db *DB) Check(policy string, o *Operation, value *operations.Value) error 
 	var valid bool
 	for i, s := range p.Specs {
 		if db.policiesReg[policy][i].MatchString(o.Key) {
-			if s.MaxSize > 0 && l > s.MaxSize {
-				return ErrOpTooLarge
-			}
 			if err := s.checkOp(o); err != nil {
 				return err
 			}
@@ -56,6 +62,38 @@ func (db *DB) Check(policy string, o *Operation, value *operations.Value) error 
 	if !valid {
 		return ErrOpDisabledKey
 	}
+	return nil
+}
+
+func (db *DB) getCurrentPolicyUsage(policy string) (usage, quota uint64) {
+	size, _, _ := db.Store.Get(globalPolicySizeKeyPrefix + "/" + policy)
+	float, _ := operations.NewValue(size).Float()
+	usage, _ = float.Uint64()
+	quota = db.policies[policy].MaxSize
+	return
+}
+
+func (db *DB) updatePolicyUsage(oldSize, newSize uint64, policy string) (key string, value []byte) {
+	usage, _ := db.getCurrentPolicyUsage(policy)
+	float := encoding.NewFloat()
+	float.SetUint64(usage - oldSize + newSize)
+	key = globalPolicySizeKeyPrefix + "/" + policy
+	value, _ = float.MarshalBinary()
+	return
+}
+
+func (db *DB) checkCurrentPolicyUsage(oldSize uint64, policy string, values map[string]*operations.Value) error {
+	usage, quota := db.getCurrentPolicyUsage(policy)
+
+	var newSize uint64
+	for _, v := range values {
+		newSize += uint64(len(v.Raw))
+	}
+
+	if quota > 0 && usage-oldSize+newSize > quota {
+		return ErrPolicyQuotaExceeded
+	}
+
 	return nil
 }
 
