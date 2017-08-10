@@ -22,6 +22,7 @@ type Mycelium struct {
 	rContainer     requestsContainer
 	recoveries     map[string]*recovery
 	recoveryQuorum int
+	fullSyncPeer   string // identity of full sync peer, empty if no full sync required
 }
 
 // MyceliumConfig is the structure used to setup a new Mycelium.

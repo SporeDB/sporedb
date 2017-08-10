@@ -41,3 +41,7 @@ message Operation {
 message RecoverRequest {
 	string key = 1;
 }
+
+message Catalog {
+	map<string, version.V> keys = 1;
+}

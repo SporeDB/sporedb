@@ -85,3 +85,18 @@ func TestS_Get_Unknown(t *testing.T) {
 	require.NotNil(t, err)
 	require.Exactly(t, v, version.NoVersion)
 }
+
+func TestS_List(t *testing.T) {
+	d := []byte("Content")
+	v := version.New(d)
+	_ = ts.Set("testList", d, v)
+
+	catalog, err := ts.List()
+	require.Nil(t, err)
+	require.Len(t, catalog, 5)
+	require.Contains(t, catalog, "testSet")
+	require.Contains(t, catalog, "testBatch_a")
+	require.Contains(t, catalog, "testBatch_b")
+	require.Contains(t, catalog, "testBatch_c")
+	require.Exactly(t, catalog["testList"], v)
+}

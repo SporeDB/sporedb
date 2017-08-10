@@ -20,8 +20,9 @@ var (
 	ErrOpSystemKey         = errors.New("the requested key has been reserved for internal use")
 )
 
-const internalKeyPrefix = "__internal"
-const globalPolicySizeKeyPrefix = internalKeyPrefix + "/size"
+// InternalKeyPrefix is used to discriminate internal keys.
+const InternalKeyPrefix = "__internal"
+const globalPolicySizeKeyPrefix = InternalKeyPrefix + "/size"
 
 // NonePolicy is a basic policy used for testing and development.
 var NonePolicy = &Policy{
@@ -39,7 +40,7 @@ func (db *DB) Check(policy string, o *Operation, value *operations.Value) error 
 		return ErrUnknownPolicy
 	}
 
-	if strings.HasPrefix(o.Key, internalKeyPrefix) {
+	if strings.HasPrefix(o.Key, InternalKeyPrefix) {
 		return ErrOpSystemKey
 	}
 

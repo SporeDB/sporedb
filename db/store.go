@@ -17,4 +17,6 @@ type Store interface {
 	Set(key string, value []byte, version *version.V) error
 	// SetBatch executes the given "Set" operations in a atomic way.
 	SetBatch(keys []string, values [][]byte, versions []*version.V) error
+	// List returns the map of keys with their values.
+	List() (map[string]*version.V, error)
 }

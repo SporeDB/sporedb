@@ -82,6 +82,27 @@ func (s *S) SetBatch(keys []string, values [][]byte, versions []*version.V) erro
 	return s.db.Write(wo, batch)
 }
 
+// List returns the map of keys with their values.
+func (s *S) List() (map[string]*version.V, error) {
+	it := s.db.NewIterator(ro)
+	defer it.Close()
+
+	catalog := make(map[string]*version.V)
+
+	for it.SeekToFirst(); it.Valid(); it.Next() {
+		key := string(it.Key().Data())
+		data := it.Value()
+		if data.Size() >= version.VersionBytes {
+			v := &version.V{}
+			if v.UnmarshalBinary(data.Data()[:version.VersionBytes]) == nil {
+				catalog[key] = v
+			}
+		}
+	}
+
+	return catalog, nil
+}
+
 // Close should be used after using the RocksDB store.
 func (s *S) Close() error {
 	s.db.Close()

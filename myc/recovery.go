@@ -1,6 +1,7 @@
 package myc
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -20,32 +21,66 @@ type recovery struct {
 }
 
 func (m *Mycelium) handleRecoverRequest(peer *Peer, request *db.RecoverRequest) {
-	data, v, err := m.DB.Get(request.Key)
-	if err != nil {
-		return
+	var err error
+	var call *protocol.Call
+
+	if request.Key == "" { // Full-State-Transfer request, send catalog
+		catalog := &db.Catalog{}
+		catalog.Keys, err = m.DB.Store.List()
+		if err != nil {
+			zap.L().Error("Unable to send the catalog",
+				zap.Error(err),
+			)
+			return
+		}
+
+		zap.L().Info("Sending catalog",
+			zap.String("peer", peer.Identity),
+		)
+
+		call = &protocol.Call{
+			F: protocol.FnCATALOG,
+			M: catalog,
+		}
+	} else {
+		var data []byte
+		var v *version.V
+		data, v, err = m.DB.Get(request.Key)
+		if err != nil {
+			zap.L().Error("Unable to get key for recovery",
+				zap.String("key", request.Key),
+				zap.Error(err),
+			)
+			return
+		}
+
+		raw := &protocol.Raw{
+			Key:     request.Key,
+			Version: v,
+			Data:    data,
+		}
+
+		raw.Signature, err = m.DB.KeyRing.Sign(raw.GetMessage())
+		if err != nil {
+			zap.L().Error("Unable to sign the spore",
+				zap.String("step", "recovery_proposal"),
+				zap.Error(err),
+			)
+			return
+		}
+
+		call = &protocol.Call{
+			F: protocol.FnRAW,
+			M: raw,
+		}
 	}
 
-	raw := &protocol.Raw{
-		Key:     request.Key,
-		Version: v,
-		Data:    data,
-	}
-
-	raw.Signature, err = m.DB.KeyRing.Sign(raw.GetMessage())
+	rawMessage, err := call.Pack()
 	if err != nil {
-		zap.L().Error("Unable to sign the spore",
-			zap.String("step", "recovery_proposal"),
+		zap.L().Error("Unable to pack recovery response",
+			zap.String("type", call.F.String()),
 			zap.Error(err),
 		)
-		return
-	}
-
-	rawMessage, err := (&protocol.Call{
-		F: protocol.FnRAW,
-		M: raw,
-	}).Pack()
-
-	if err != nil {
 		return
 	}
 
@@ -64,7 +99,7 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 		return
 	}
 
-	r.mutex.Lock()
+	r.mutex.Lock() // Lock the recovery
 	defer r.mutex.Unlock()
 
 	// Verify recovery timeout
@@ -75,8 +110,9 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 	}
 
 	// Verify version
-	if version.New(raw.Data).Matches(raw.Version) != nil {
+	if !strings.HasPrefix(raw.Key, db.InternalKeyPrefix) && version.New(raw.Data).Matches(raw.Version) != nil {
 		zap.L().Warn("Invalid recovery proposal",
+			zap.String("key", raw.Key),
 			zap.String("emitter", identity),
 			zap.String("step", "version"),
 		)
@@ -87,6 +123,7 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 	err := m.DB.KeyRing.Verify(identity, raw.GetMessage(), raw.Signature)
 	if err != nil {
 		zap.L().Warn("Invalid recovery proposal",
+			zap.String("key", raw.Key),
 			zap.String("emitter", identity),
 			zap.String("step", "crypto"),
 			zap.Error(err),
@@ -99,15 +136,34 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 	if len(r.answers) >= r.quorum {
 		result := r.checkQuorum()
 		if result != nil {
-			_ = m.DB.Apply(&db.Spore{
-				Uuid: "RECOVER_" + result.Key,
-				Operations: []*db.Operation{{
-					Key:  result.Key,
-					Op:   db.Operation_SET,
-					Data: result.Data,
-				}},
-			})
+			_ = m.DB.Store.Set(result.Key, result.Data, result.Version)
 			m.StopRecovery(raw.Key)
+		}
+	}
+}
+
+func (m *Mycelium) handleCatalog(identity string, catalog *db.Catalog) {
+	m.mutex.Lock()
+	fullSyncPeer := m.fullSyncPeer
+
+	if identity != fullSyncPeer {
+		m.mutex.Unlock()
+		return
+	}
+
+	m.fullSyncPeer = ""
+	m.mutex.Unlock()
+
+	for k, v := range catalog.Keys {
+		_, v2, _ := m.DB.Store.Get(k)
+		if v.Matches(v2) != nil {
+			m.StartRecovery(k, m.recoveryQuorum)
+			m.Broadcast(nil, &protocol.Call{
+				F: protocol.FnRECOVERREQUEST,
+				M: &db.RecoverRequest{
+					Key: k,
+				},
+			})
 		}
 	}
 }
@@ -128,6 +184,41 @@ func (r *recovery) checkQuorum() *protocol.Raw {
 	}
 
 	return nil
+}
+
+// StartFullSync starts a full state-transfer recovery by asking a (hopefully)
+// trusted node his full catalog of (key, version) pairs.
+func (m *Mycelium) StartFullSync(peer string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// Looking for the peer
+	var peerChan chan []byte
+	for _, p := range m.Peers {
+		if p.Identity == peer {
+			peerChan = p.write
+			break
+		}
+	}
+
+	if peerChan == nil {
+		zap.L().Warn("Unable to find full state-transfer peer",
+			zap.String("peer", peer),
+		)
+		return
+	}
+
+	call := &protocol.Call{
+		F: protocol.FnRECOVERREQUEST,
+		M: &db.RecoverRequest{},
+	}
+	data, _ := call.Pack()
+	peerChan <- data
+	m.fullSyncPeer = peer
+
+	zap.L().Info("Asking for a full state-transfer",
+		zap.String("peer", peer),
+	)
 }
 
 // StartRecovery registers a new recovery process for the specified key.
@@ -164,7 +255,7 @@ func (m *Mycelium) StopRecovery(key string) {
 		return
 	}
 
-	zap.L().Info("Aborting partial recovery",
+	zap.L().Info("Stopping partial recovery",
 		zap.String("key", key),
 		zap.Int("quorum", r.quorum),
 		zap.Int("answers", len(r.answers)),

@@ -40,6 +40,8 @@ func (m *Mycelium) router(p *Peer) {
 			go m.handleRecoverRequest(p, c.M.(*db.RecoverRequest))
 		case protocol.FnRAW:
 			go m.handleRaw(p.Identity, c.M.(*protocol.Raw))
+		case protocol.FnCATALOG:
+			go m.handleCatalog(p.Identity, c.M.(*db.Catalog))
 		}
 	}
 }

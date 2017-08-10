@@ -196,7 +196,6 @@ Feedbacks about the project and the whitepaper will be very much appreciated! ðŸ
 ## Implemented features
 
 * Basic database management
-  * RocksDB Layer
   * SET operation
   * CONCAT operation
   * ADD operation (float)
@@ -204,14 +203,13 @@ Feedbacks about the project and the whitepaper will be very much appreciated! ðŸ
   * SADD operation (set)
   * SREM operation (set)
 * Basic policy management
-* Endorsement algorithm
+  * With disk usage quotas
 * Integrity with Ed25519 signatures
   * CLI KeyRing management similar to OpenPGP
 * P2P network
+  * Gossip communications
+  * Partial and Full State-Transfer support
 * GRPC Server / Client API
-* Database GRPC client
-* Recovery after failures
-  * Single state-transfer (with version comparison)
 * Pluggable underlying database drivers
   * BoltDB (default)
   * RocksDB
