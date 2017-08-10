@@ -104,3 +104,18 @@ func TestS_Get_Corrupted(t *testing.T) {
 		require.Exactly(t, version.NoVersion, v, fmt.Sprintf("case %d is not returning NoVersion despite the corruption", i))
 	}
 }
+
+func TestS_List(t *testing.T) {
+	d := []byte("Content")
+	v := version.New(d)
+	_ = ts.Set("testList", d, v)
+
+	catalog, err := ts.List()
+	require.Nil(t, err)
+	require.Len(t, catalog, 5)
+	require.Contains(t, catalog, "testSet")
+	require.Contains(t, catalog, "testBatch_a")
+	require.Contains(t, catalog, "testBatch_b")
+	require.Contains(t, catalog, "testBatch_c")
+	require.Exactly(t, catalog["testList"], v)
+}

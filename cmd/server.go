@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -20,6 +21,7 @@ import (
 	"gitlab.com/SporeDB/sporedb/myc/protocol"
 )
 
+var fullSync *string
 var recoverKeys *string
 var storeDrivers map[string]drivers.Constructor
 
@@ -79,17 +81,7 @@ var serverCmd = &cobra.Command{
 			DB:     database,
 		})
 
-		// Recover keys (optional)
-		for _, key := range strings.Split(*recoverKeys, ",") {
-			if key == "" {
-				continue
-			}
-
-			zap.L().Info("Recovery request",
-				zap.String("key", key),
-			)
-			database.Messages <- &db.RecoverRequest{Key: key}
-		}
+		go startRecover(database, mycelium)
 
 		// Catch SIGINT
 		go func() {
@@ -121,8 +113,28 @@ var serverCmd = &cobra.Command{
 	},
 }
 
+func startRecover(database *db.DB, mycelium *myc.Mycelium) {
+	time.Sleep(5 * time.Second) // Artificial delay to ease start-up
+
+	if *fullSync != "" {
+		mycelium.StartFullSync(*fullSync)
+	}
+
+	for _, key := range strings.Split(*recoverKeys, ",") {
+		if key == "" {
+			continue
+		}
+
+		zap.L().Info("Recovery request",
+			zap.String("key", key),
+		)
+		database.Messages <- &db.RecoverRequest{Key: key}
+	}
+}
+
 func init() {
 	RootCmd.AddCommand(serverCmd)
 
 	recoverKeys = serverCmd.Flags().StringP("recover", "r", "", "set of keys to recover at startup (coma-separated)")
+	fullSync = serverCmd.Flags().StringP("full-sync", "s", "", "identity of peer to ask for a full state-transfer")
 }

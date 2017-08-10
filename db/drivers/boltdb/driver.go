@@ -85,6 +85,28 @@ func (s *S) SetBatch(keys []string, values [][]byte, versions []*version.V) erro
 	})
 }
 
+// List returns the map of keys with their values.
+func (s *S) List() (map[string]*version.V, error) {
+	catalog := make(map[string]*version.V)
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(bucketName)
+		c := b.Cursor()
+
+		for k, d := c.First(); k != nil; k, d = c.Next() {
+			if len(d) >= version.VersionBytes {
+				v := &version.V{}
+				if v.UnmarshalBinary(d[:version.VersionBytes]) == nil {
+					catalog[string(k)] = v
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return catalog, err
+}
+
 // Close should be used after using the RocksDB store.
 func (s *S) Close() error {
 	return s.db.Close()

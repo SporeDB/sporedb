@@ -33,6 +33,7 @@ const (
 	FnRAW                     = 0x05
 	FnGOSSIP                  = 0x06
 	FnNODES                   = 0x07
+	FnCATALOG                 = 0x08
 )
 
 var fnTypes = map[Function]reflect.Type{
@@ -43,6 +44,7 @@ var fnTypes = map[Function]reflect.Type{
 	FnRAW:            reflect.TypeOf(Raw{}),
 	FnGOSSIP:         reflect.TypeOf(Gossip{}),
 	FnNODES:          reflect.TypeOf(Nodes{}),
+	FnCATALOG:        reflect.TypeOf(db.Catalog{}),
 }
 
 var fnString = map[Function]string{
@@ -52,6 +54,7 @@ var fnString = map[Function]string{
 	FnRAW:            "raw",
 	FnGOSSIP:         "gossip",
 	FnNODES:          "nodes",
+	FnCATALOG:        "catalog",
 }
 
 func (f Function) String() string {
