@@ -87,8 +87,8 @@ func (m *Mycelium) handleRecoverRequest(peer *Peer, request *db.RecoverRequest) 
 	peer.write <- rawMessage
 }
 
-func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
-	if identity == "" {
+func (m *Mycelium) handleRaw(peer *Peer, raw *protocol.Raw) {
+	if !peer.session.IsTrusted() {
 		return
 	}
 
@@ -105,6 +105,10 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 	// Verify recovery timeout
 	if r.stale || r.deadline.Before(time.Now()) {
 		r.stale = true
+		zap.L().Warn("Recovery expired",
+			zap.String("key", raw.Key),
+			zap.Time("deadline", r.deadline),
+		)
 		m.StopRecovery(raw.Key)
 		return
 	}
@@ -113,25 +117,25 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 	if !strings.HasPrefix(raw.Key, db.InternalKeyPrefix) && version.New(raw.Data).Matches(raw.Version) != nil {
 		zap.L().Warn("Invalid recovery proposal",
 			zap.String("key", raw.Key),
-			zap.String("emitter", identity),
+			zap.String("emitter", peer.Identity),
 			zap.String("step", "version"),
 		)
 		return
 	}
 
 	// Verify raw signature
-	err := m.DB.KeyRing.Verify(identity, raw.GetMessage(), raw.Signature)
+	err := m.DB.KeyRing.Verify(peer.Identity, raw.GetMessage(), raw.Signature)
 	if err != nil {
 		zap.L().Warn("Invalid recovery proposal",
 			zap.String("key", raw.Key),
-			zap.String("emitter", identity),
+			zap.String("emitter", peer.Identity),
 			zap.String("step", "crypto"),
 			zap.Error(err),
 		)
 		return
 	}
 
-	r.answers[identity] = raw
+	r.answers[peer.Identity] = raw
 
 	if len(r.answers) >= r.quorum {
 		result := r.checkQuorum()
@@ -142,11 +146,11 @@ func (m *Mycelium) handleRaw(identity string, raw *protocol.Raw) {
 	}
 }
 
-func (m *Mycelium) handleCatalog(identity string, catalog *db.Catalog) {
+func (m *Mycelium) handleCatalog(peer *Peer, catalog *db.Catalog) {
 	m.mutex.Lock()
 	fullSyncPeer := m.fullSyncPeer
 
-	if identity != fullSyncPeer {
+	if peer.Identity != fullSyncPeer || !peer.session.IsTrusted() {
 		m.mutex.Unlock()
 		return
 	}
@@ -194,15 +198,24 @@ func (m *Mycelium) StartFullSync(peer string) {
 
 	// Looking for the peer
 	var peerChan chan []byte
+	var peerTrusted bool
 	for _, p := range m.Peers {
 		if p.Identity == peer {
 			peerChan = p.write
+			peerTrusted = p.session.IsTrusted()
 			break
 		}
 	}
 
 	if peerChan == nil {
 		zap.L().Warn("Unable to find full state-transfer peer",
+			zap.String("peer", peer),
+		)
+		return
+	}
+
+	if !peerTrusted {
+		zap.L().Warn("Untrusted full state-transfer peer",
 			zap.String("peer", peer),
 		)
 		return

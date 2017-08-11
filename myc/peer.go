@@ -7,13 +7,13 @@ type Peer struct {
 	protocol.Node
 
 	write   chan []byte
-	conn    conn
+	session protocol.Session
 	stopped bool
 }
 
 func (p *Peer) emitter() {
 	for data := range p.write {
-		_, _ = p.conn.Write(data)
+		_, _ = p.session.Write(data)
 	}
 }
 
@@ -21,7 +21,7 @@ func (p *Peer) emitter() {
 func (p *Peer) Close() error {
 	close(p.write)
 	p.stopped = true
-	return p.conn.Close()
+	return p.session.Close()
 }
 
 // Equals shall be used to compare two peers.

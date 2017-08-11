@@ -13,7 +13,7 @@ func (m *Mycelium) router(p *Peer) {
 	go p.emitter()
 	for !p.stopped {
 		c := &protocol.Call{}
-		err := c.Unpack(p.conn)
+		err := c.Unpack(p.session)
 		if err != nil {
 			continue
 		}
@@ -39,9 +39,9 @@ func (m *Mycelium) router(p *Peer) {
 		case protocol.FnRECOVERREQUEST:
 			go m.handleRecoverRequest(p, c.M.(*db.RecoverRequest))
 		case protocol.FnRAW:
-			go m.handleRaw(p.Identity, c.M.(*protocol.Raw))
+			go m.handleRaw(p, c.M.(*protocol.Raw))
 		case protocol.FnCATALOG:
-			go m.handleCatalog(p.Identity, c.M.(*db.Catalog))
+			go m.handleCatalog(p, c.M.(*db.Catalog))
 		}
 	}
 }

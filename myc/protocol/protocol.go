@@ -112,10 +112,11 @@ func (c *Call) Unpack(in InputStream) error {
 	}
 
 	// Unmarshal data
-	i := int(l)
-	if i < 0 {
+	if l > (1 << 30) {
 		return errors.New("invalid length")
 	}
+
+	i := int(l)
 
 	buf := make([]byte, i)
 	_, err = io.ReadFull(in, buf)

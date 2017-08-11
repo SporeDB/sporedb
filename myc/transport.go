@@ -1,6 +1,10 @@
 package myc
 
-import "io"
+import (
+	"io"
+
+	"gitlab.com/SporeDB/sporedb/myc/protocol"
+)
 
 type transport interface {
 	io.Closer
@@ -10,10 +14,10 @@ type transport interface {
 }
 
 type conn interface {
-	io.ReadWriteCloser
-	io.ByteReader
+	protocol.Transport
 
 	SetHandshake(func() error)
+	Raw() protocol.Transport
 }
 
-type hookFn func(n *Peer)
+type hookFn func(n *Peer, c conn)

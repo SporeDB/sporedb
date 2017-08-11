@@ -48,19 +48,26 @@ func (t *transportTCP) Listen(address string, hook hookFn) error {
 			errChan:  make(chan error),
 		}
 
+		p := &Peer{
+			Node: protocol.Node{Address: c.RemoteAddr().String()},
+		}
+
 		// Start watch routine
 		go func(c *connTCP) {
 			err, ok := <-c.errChan
 			if ok {
+				zap.L().Warn("Disconnected",
+					zap.String("transport", "tcp"),
+					zap.String("address", address),
+					zap.Error(err),
+				)
 				c.connChan <- err
+				hook(p, nil)
 			}
 		}(c)
 
 		// Start hook routine
-		go hook(&Peer{
-			Node: protocol.Node{Address: c.RemoteAddr().String()},
-			conn: c,
-		})
+		go hook(p, c)
 	}
 }
 
@@ -99,26 +106,30 @@ func (c *connTCP) connect(address string) {
 	var conn net.Conn
 
 	for open := true; open; _, open = <-c.errChan {
-		conn, err = dialer.Dial("tcp", address)
-		c.TCPConn, _ = conn.(*net.TCPConn)
-		c.connChan <- nil
-		if err != nil {
-			zap.L().Warn("Disconnected",
-				zap.String("transport", "tcp"),
-				zap.String("address", address),
-				zap.Error(err),
-			)
-			time.Sleep(time.Second)
-			continue
+		for {
+			conn, err = dialer.Dial("tcp", address)
+			if err != nil {
+				zap.L().Warn("Disconnected",
+					zap.String("transport", "tcp"),
+					zap.String("address", address),
+					zap.Error(err),
+				)
+				time.Sleep(time.Second)
+			} else {
+				break
+			}
 		}
 
+		c.TCPConn, _ = conn.(*net.TCPConn)
 		zap.L().Info("Connected",
 			zap.String("transport", "tcp"),
 			zap.String("address", address),
 		)
 
 		if c.handshake != nil {
-			_ = c.handshake()
+			c.connChan <- c.handshake()
+		} else {
+			c.connChan <- nil
 		}
 	}
 }
@@ -159,4 +170,18 @@ func (c *connTCP) Write(b []byte) (int, error) {
 	}
 
 	return n, err
+}
+
+func (c *connTCP) Raw() protocol.Transport {
+	return &rawTCPTransport{c.TCPConn}
+}
+
+type rawTCPTransport struct {
+	*net.TCPConn
+}
+
+func (r *rawTCPTransport) ReadByte() (byte, error) {
+	d := make([]byte, 1)
+	_, err := io.ReadFull(r, d)
+	return d[0], err
 }

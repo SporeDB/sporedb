@@ -17,18 +17,18 @@ func Test_transportTCP(t *testing.T) {
 
 	// Start echo server
 	go func() {
-		_ = srv.Listen(p, func(n *Peer) {
+		_ = srv.Listen(p, func(n *Peer, c conn) {
 			b := make([]byte, 64)
-			_, _ = n.conn.Read(b)
-			_, _ = n.conn.Write(b[:10])
+			_, _ = c.Read(b)
+			_, _ = c.Write(b[:10])
 
 			// Simulate a temporary crash
 			_ = srv.Close()
-			_ = n.conn.Close()
+			_ = c.Close()
 
 			time.Sleep(3000 * time.Millisecond)
-			_ = srv2.Listen(p, func(nn *Peer) {
-				_, _ = nn.conn.Write(b[10:])
+			_ = srv2.Listen(p, func(nn *Peer, cc conn) {
+				_, _ = cc.Write(b[10:])
 				_ = srv2.Close()
 			})
 		})
