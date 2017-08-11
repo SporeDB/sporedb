@@ -2,7 +2,9 @@
 package myc
 
 import (
+	"errors"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -92,63 +94,66 @@ func (m *Mycelium) Bind(n *Peer) error {
 	}
 	m.mutex.Unlock()
 
+	n.session = protocol.NewECDHESession(m.DB.KeyRing, m.DB.Identity)
 	conn, err := m.transport.Bind(n.Address)
 	if err != nil {
 		return err
 	}
 
-	handshake := func() (error, string) {
-		// Try to perform HELLO exchange from client-side.
-		// During the handshake, remote version and identity are fetched.
+	handshake := func() error {
+		hello, _ := n.session.Hello()
 		c := &protocol.Call{
 			F: protocol.FnHELLO,
-			M: &protocol.Hello{
-				Version:  protocol.Version,
-				Identity: m.DB.Identity,
-			},
+			M: hello,
 		}
+
+		rawTransport := conn.Raw()
 
 		d, _ := c.Pack()
-		_, err = conn.Write(d)
-		if err != nil {
-			_ = conn.Close()
-			return err, ""
+		written, _ := rawTransport.Write(d)
+		if written == 0 {
+			return errors.New("no connection established")
 		}
 
-		err = c.Unpack(conn)
+		err = c.Unpack(rawTransport)
 		h, ok := c.M.(*protocol.Hello)
-		if err != nil || !ok || h.Version != protocol.Version {
-			_ = conn.Close()
-			return err, ""
+		if err != nil {
+			return err
 		}
-		return nil, h.Identity
+
+		if !ok {
+			return errors.New("invalid hello message")
+		}
+
+		err = n.session.Verify(h)
+		if err != nil {
+			return err
+		}
+
+		n.Identity = h.Identity
+		zap.L().Info("Handshake",
+			zap.String("mode", "client"),
+			zap.String("address", n.Address),
+			zap.String("identity", n.Identity),
+			zap.Bool("trusted", n.session.IsTrusted()),
+		)
+
+		return n.session.Open(conn)
 	}
 
-	err, identity := handshake()
-	if err != nil {
-		_ = conn.Close()
-		return err
+	for handshake() != nil {
+		time.Sleep(2 * time.Second)
 	}
 
-	conn.SetHandshake(func() error {
-		err, _ := handshake()
-		return err
-	})
+	conn.SetHandshake(handshake)
 
-	n.Identity = identity
-	n.conn = conn
 	n.write = make(chan []byte, 64)
 
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
 	m.Peers = append(m.Peers, n)
-	go m.router(n)
+	m.mutex.Unlock()
 
-	zap.L().Info("Bound",
-		zap.String("mode", "client"),
-		zap.String("address", n.Address),
-		zap.String("identity", n.Identity),
-	)
+	go m.router(n)
 	return nil
 }
 
@@ -164,36 +169,52 @@ func (m *Mycelium) Close() error {
 	return m.transport.Close()
 }
 
-// handler is called for each new incoming connection.
+// handler is called for each new incoming connection,
+// and each client disconnection (incoming == nil).
 // It starts a new listening routine.
-func (m *Mycelium) handler(n *Peer) {
+func (m *Mycelium) handler(n *Peer, incoming conn) {
+	if incoming == nil {
+		m.handlerDisconnect(n)
+		return
+	}
+
 	// Wait for HELLO message (server-side)
 	c := &protocol.Call{}
-	err := c.Unpack(n.conn)
-	if err != nil || c.F != protocol.FnHELLO {
-		_ = n.conn.Close()
+	if c.Unpack(incoming) != nil || c.F != protocol.FnHELLO {
+		_ = incoming.Close()
 		return
 	}
 
 	h, ok := c.M.(*protocol.Hello)
-	if !ok || h.Version != protocol.Version {
-		_ = n.conn.Close()
+	if !ok {
+		_ = incoming.Close()
 		return
 	}
+
+	n.session = protocol.NewECDHESession(m.DB.KeyRing, m.DB.Identity)
+	if n.session.Verify(h) != nil {
+		_ = incoming.Close()
+		return
+	}
+
 	n.Identity = h.Identity
 
-	// Update identity and reply
-	h.Identity = m.DB.Identity
+	c.M, _ = n.session.Hello()
 	d, _ := c.Pack()
-	_, err = n.conn.Write(d)
+	_, err := incoming.Write(d)
 	if err != nil {
-		_ = n.conn.Close()
+		_ = incoming.Close()
 		return
 	}
 
 	// Is already bound?
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+
+	if n.session.Open(incoming) != nil {
+		_ = incoming.Close()
+		return
+	}
 
 	for _, p := range m.Peers {
 		if n.Equals(p) {
@@ -204,9 +225,22 @@ func (m *Mycelium) handler(n *Peer) {
 	n.write = make(chan []byte, 64)
 	m.Peers = append(m.Peers, n)
 	go m.router(n)
-	zap.L().Info("Bound",
+	zap.L().Info("Handshake",
 		zap.String("mode", "server"),
 		zap.String("address", n.Address),
 		zap.String("identity", n.Identity),
+		zap.Bool("trusted", n.session.IsTrusted()),
 	)
+}
+
+func (m *Mycelium) handlerDisconnect(n *Peer) {
+	m.mutex.Lock()
+	for i, p := range m.Peers {
+		if p == n {
+			m.Peers = append(m.Peers[:i], m.Peers[i+1:]...)
+			break
+		}
+	}
+	m.mutex.Unlock()
+	_ = n.Close()
 }

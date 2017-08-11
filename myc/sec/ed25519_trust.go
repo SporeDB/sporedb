@@ -96,16 +96,11 @@ func (k *KeyRingEd25519) Verify(from string, cleartext, signature []byte) error 
 		return &ErrUnknownIdentity{I: from}
 	}
 
-	err := k.trustedUnsafe(key)
-	if err != nil {
-		return err
-	}
-
 	if !ed25519.Verify(key.Public, cleartext, signature) {
 		return ErrInvalidSignature
 	}
 
-	return nil
+	return k.trustedUnsafe(key)
 }
 
 // Verify signature does NOT check for trust chain.

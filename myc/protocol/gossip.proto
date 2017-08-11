@@ -1,11 +1,26 @@
 syntax = "proto3";
 
 package protocol;
+import "google/protobuf/timestamp.proto";
 import "db/version/version.proto";
 
 message Hello {
 	uint64 version = 1;
 	string identity = 2;
+	google.protobuf.Timestamp timestamp = 3;
+
+	// The public key is used in the ECDHE key exchange.
+	// It MUST be a curve25519 public key.
+	bytes public_key = 9;
+
+	// The signature of the Hello message is computed on the message with an empty signature.
+	// signature = signature by emitter ( marshal ( hello without signature ) )
+	//
+	// It is used as the authentication block of the ECDHE key exchange.
+	// If the used signature key is not trusted by one peer, the connection MAY BE established
+	// in "untrusted" mode, meaning that sensible operations MUST NOT be executed with the
+	// connected peer (vulnerable to MitM attacks).
+	bytes signature = 10;
 }
 
 message Raw {
