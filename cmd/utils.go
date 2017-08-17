@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/awnumar/memguard"
 	"github.com/chzyer/readline"
 	"github.com/spf13/cobra"
 )
@@ -13,7 +14,7 @@ import (
 func check(err error) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		memguard.SafeExit(1)
 	}
 }
 

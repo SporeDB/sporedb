@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/awnumar/memguard"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -14,13 +15,17 @@ import (
 
 const strTrustLevel = "none,low,high,ultimate"
 
-func getPassword() string {
+func getPassword() *memguard.LockedBuffer {
 	password := viper.GetString("password")
 	if len(password) == 0 {
 		check(errors.New("please provide a password through `PASSWORD` environment variable"))
 	}
 
-	return password
+	buffer, err := memguard.NewFromBytes([]byte(password), true)
+	check(err)
+
+	viper.Set("password", nil)
+	return buffer
 }
 
 func getKeyRing() sec.KeyRing {
