@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/awnumar/memguard"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,14 +45,15 @@ var testKeyPairsEd25519 = []testKeyPairEd25519{
 	},
 }
 
-func getTestKeyPairEd25519(t string, i int) []byte {
-	data := testKeyPairsEd25519[i].pub
-	if t == "sec" {
-		data = testKeyPairsEd25519[i].sec
-	}
-
-	raw, _ := hex.DecodeString(data)
+func getTestPubEd25519(i int) []byte {
+	raw, _ := hex.DecodeString(testKeyPairsEd25519[i].pub)
 	return raw
+}
+
+func getTestSecEd25519(i int) *memguard.LockedBuffer {
+	raw, _ := hex.DecodeString(testKeyPairsEd25519[i].sec)
+	buf, _ := memguard.NewFromBytes(raw, true)
+	return buf
 }
 
 func TestEd25519(t *testing.T) {
@@ -62,14 +64,23 @@ func TestEd25519_UnlockPrivate(t *testing.T) {
 	k := NewKeyRingEd25519()
 	k.armoredSecret, _ = pem.Decode([]byte(testPEMPrivateEd25519))
 
-	require.NotNil(t, k.UnlockPrivate("wrong"))
-	require.Nil(t, k.UnlockPrivate("password"))
+	wrongPass, _ := memguard.NewFromBytes([]byte("wrong"), true)
+	defer wrongPass.Destroy()
+
+	rightPass, _ := memguard.NewFromBytes([]byte("password"), true)
+	defer rightPass.Destroy()
+
+	require.NotNil(t, k.UnlockPrivate(wrongPass))
+	require.Nil(t, k.UnlockPrivate(rightPass))
 	require.NotNil(t, k.secret)
 }
 
 func TestEd22519_CreatePrivate(t *testing.T) {
+	password, _ := memguard.NewFromBytes([]byte("password"), true)
+	defer password.Destroy()
+
 	k := NewKeyRingEd25519()
-	err := k.CreatePrivate("password")
+	err := k.CreatePrivate(password)
 	require.Nil(t, err)
 
 	armor := string(pem.EncodeToMemory(k.armoredSecret))
@@ -81,8 +92,10 @@ DEK-Info: AES-256-CBC`
 }
 
 func TestEd25519_AddGetPublic(t *testing.T) {
+	defer memguard.DestroyAll()
+
 	k := NewKeyRingEd25519()
-	k.secret = getTestKeyPairEd25519("sec", 0)
+	k.secret = getTestSecEd25519(0)
 
 	// Test invalid key
 	err := k.AddPublic("wrong", TrustHIGH, []byte("HELLO"))
@@ -93,7 +106,7 @@ func TestEd25519_AddGetPublic(t *testing.T) {
 	require.NotNil(t, err)
 
 	// Test valid key
-	expected := getTestKeyPairEd25519("pub", 1)
+	expected := getTestPubEd25519(1)
 	require.Nil(t, k.AddPublic("a", TrustHIGH, expected))
 	got, trust, err := k.GetPublic("a")
 	require.Exactly(t, expected, got)
@@ -108,23 +121,25 @@ func TestEd25519_AddGetPublic(t *testing.T) {
 	require.Exactly(t, TrustLOW, trust)
 
 	// Test invalid identity
-	require.Exactly(t, ErrInvalidIdentity, k.AddPublic("", TrustHIGH, getTestKeyPairEd25519("pub", 0)))
+	require.Exactly(t, ErrInvalidIdentity, k.AddPublic("", TrustHIGH, getTestPubEd25519(0)))
 }
 
 func TestEd25519_SignVerify(t *testing.T) {
+	defer memguard.DestroyAll()
+
 	k1 := NewKeyRingEd25519()
-	k1.secret = getTestKeyPairEd25519("sec", 0)
+	k1.secret = getTestSecEd25519(0)
 
 	k2 := NewKeyRingEd25519()
 	k2.stale = true
 	k2.keys["k1"] = &KeyEd25519{
-		Public:   getTestKeyPairEd25519("pub", 0),
+		Public:   getTestPubEd25519(0),
 		identity: "k1",
 		trust:    TrustULTIMATE,
 	}
 
 	key2 := &KeyEd25519{
-		Public:   getTestKeyPairEd25519("pub", 1),
+		Public:   getTestPubEd25519(1),
 		identity: "k2",
 		trust:    TrustULTIMATE,
 		Signatures: map[string]*Signature{
@@ -136,7 +151,7 @@ func TestEd25519_SignVerify(t *testing.T) {
 	k3 := &KeyRingEd25519{
 		keys: map[string]*KeyEd25519{
 			"k1": &KeyEd25519{
-				Public:   getTestKeyPairEd25519("pub", 0),
+				Public:   getTestPubEd25519(0),
 				identity: "k1",
 				trust:    TrustNONE,
 			},
@@ -183,19 +198,21 @@ func TestEd25519_SignVerify(t *testing.T) {
 }
 
 func TestEd25519_AddGetSignature(t *testing.T) {
+	defer memguard.DestroyAll()
+
 	// Scenario: k0 will sign 2's identity and give it to k1.
 	k0 := NewKeyRingEd25519()
-	k0.secret = getTestKeyPairEd25519("sec", 0)
+	k0.secret = getTestSecEd25519(0)
 
 	k1 := NewKeyRingEd25519()
-	k1.secret = getTestKeyPairEd25519("sec", 1)
+	k1.secret = getTestSecEd25519(1)
 
-	require.Nil(t, k0.AddPublic("k2", TrustHIGH, getTestKeyPairEd25519("pub", 2)))
-	require.Nil(t, k1.AddPublic("k0", TrustULTIMATE, getTestKeyPairEd25519("pub", 0)))
+	require.Nil(t, k0.AddPublic("k2", TrustHIGH, getTestPubEd25519(2)))
+	require.Nil(t, k1.AddPublic("k0", TrustULTIMATE, getTestPubEd25519(0)))
 
 	require.Nil(t, k1.GetSignatures("k2"), "not yet registered")
 
-	require.Nil(t, k1.AddPublic("k2", TrustNONE, getTestKeyPairEd25519("pub", 2)))
+	require.Nil(t, k1.AddPublic("k2", TrustNONE, getTestPubEd25519(2)))
 	require.Len(t, k1.GetSignatures("k2"), 0, "not yet signed by third parties")
 
 	require.NotNil(t, k1.AddSignature("k3", "", &Signature{}), "should not accept unknown signee")
@@ -224,7 +241,10 @@ func TestEd25519_AddGetSignature(t *testing.T) {
 
 func TestEd25519_Export(t *testing.T) {
 	k := NewKeyRingEd25519()
-	_ = k.CreatePrivate("password")
+	password, _ := memguard.NewFromBytes([]byte("password"), true)
+	defer password.Destroy()
+
+	_ = k.CreatePrivate(password)
 
 	data, err := k.Export("")
 	require.Nil(t, err)
@@ -235,19 +255,22 @@ func TestEd25519_Export(t *testing.T) {
 }
 
 func TestEd25519_Marshal(t *testing.T) {
+	password, _ := memguard.NewFromBytes([]byte("password"), true)
+	defer memguard.DestroyAll()
+
 	k0 := NewKeyRingEd25519()
-	k0.secret = getTestKeyPairEd25519("sec", 0)
-	k0.keys[""].Public = getTestKeyPairEd25519("pub", 0)
-	_ = k0.AddPublic("k1", TrustHIGH, getTestKeyPairEd25519("pub", 1))
-	_ = k0.AddPublic("k2", TrustLOW, getTestKeyPairEd25519("pub", 2))
+	k0.secret = getTestSecEd25519(0)
+	k0.keys[""].Public = getTestPubEd25519(0)
+	_ = k0.AddPublic("k1", TrustHIGH, getTestPubEd25519(1))
+	_ = k0.AddPublic("k2", TrustLOW, getTestPubEd25519(2))
 	_ = k0.AddSignature("k2", "", nil)
 
 	k1 := NewKeyRingEd25519()
-	k1.secret = getTestKeyPairEd25519("sec", 1)
-	k1.keys[""].Public = getTestKeyPairEd25519("pub", 1)
-	k1.armoredSecret, _ = x509.EncryptPEMBlock(rand.Reader, pemPrivateType, k1.secret, []byte("password"), pemCipher)
-	_ = k1.AddPublic("k0", TrustHIGH, getTestKeyPairEd25519("pub", 0))
-	_ = k1.AddPublic("k2", TrustNONE, getTestKeyPairEd25519("pub", 2))
+	k1.secret = getTestSecEd25519(1)
+	k1.keys[""].Public = getTestPubEd25519(1)
+	k1.armoredSecret, _ = x509.EncryptPEMBlock(rand.Reader, pemPrivateType, k1.secret.Buffer(), password.Buffer(), pemCipher)
+	_ = k1.AddPublic("k0", TrustHIGH, getTestPubEd25519(0))
+	_ = k1.AddPublic("k2", TrustNONE, getTestPubEd25519(2))
 	_ = k1.AddSignature("k0", "", nil)
 	_ = k1.AddSignature("k2", "k0", k0.GetSignatures("k2")[""])
 
@@ -320,14 +343,17 @@ func TestEd25519_Import(t *testing.T) {
 }
 
 func TestEd25519_Unmarshal(t *testing.T) {
+	password, _ := memguard.NewFromBytes([]byte("password"), true)
+	defer password.Destroy()
+
 	k := NewKeyRingEd25519()
 	require.Nil(t, k.UnmarshalBinary([]byte(armoredTestKeyRingEd25519Joined)))
 
-	require.Nil(t, k.UnlockPrivate("password"), "should retrieve correct password")
+	require.Nil(t, k.UnlockPrivate(password), "should retrieve correct password")
 
 	data, trust, err := k.GetPublic("k0")
 	require.Nil(t, err, "should retrieve k0's data")
-	require.Exactly(t, getTestKeyPairEd25519("pub", 0), data, "should retrive k0's public key")
+	require.Exactly(t, getTestPubEd25519(0), data, "should retrive k0's public key")
 	require.Exactly(t, TrustHIGH, trust, "should retrive k0's local trust level")
 
 	signatures := k.GetSignatures("k0")

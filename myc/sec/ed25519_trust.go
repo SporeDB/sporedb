@@ -76,7 +76,7 @@ func (k *KeyRingEd25519) Sign(cleartext []byte) (signature []byte, err error) {
 		return
 	}
 
-	signature = ed25519.Sign(k.secret, cleartext)
+	signature = ed25519.Sign(k.secret.Buffer(), cleartext)
 	return
 }
 

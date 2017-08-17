@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/awnumar/memguard"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/SporeDB/sporedb/db/drivers/boltdb"
 	"gitlab.com/SporeDB/sporedb/myc/sec"
@@ -20,12 +21,14 @@ func getTestingDB(t *testing.T) (db *DB, done func()) {
 	require.Nil(t, err)
 
 	keyRing := sec.NewKeyRingEd25519()
-	_ = keyRing.CreatePrivate("password")
+	password, _ := memguard.NewFromBytes([]byte("password"), true)
+	_ = keyRing.CreatePrivate(password)
 
 	db = NewDB(store, "test", keyRing)
 	require.Nil(t, db.AddPolicy(NonePolicy))
 
 	done = func() {
+		password.Destroy()
 		_ = store.Close()
 		_ = os.RemoveAll(path)
 	}

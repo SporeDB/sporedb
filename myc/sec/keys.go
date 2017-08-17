@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/awnumar/memguard"
 )
 
 // TrustLevel is a representation of a public key's trust.
@@ -81,8 +83,9 @@ const (
 // PrivateKeyHolder shall be designed to safely keep one private key.
 type PrivateKeyHolder interface {
 	Locked() bool
-	UnlockPrivate(password string) error
-	CreatePrivate(password string) error
+	LockPrivate() error
+	UnlockPrivate(password *memguard.LockedBuffer) error
+	CreatePrivate(password *memguard.LockedBuffer) error
 	Sign(cleartext []byte) (signature []byte, err error)
 }
 

@@ -6,10 +6,12 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/awnumar/memguard"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -83,16 +85,16 @@ var serverCmd = &cobra.Command{
 
 		go startRecover(database, mycelium)
 
-		// Catch SIGINT
+		// Catch SIGINT and SIGTERM
 		go func() {
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, os.Interrupt)
+			c := make(chan os.Signal, 2)
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 			for range c {
 				fmt.Println("\nStopping SporeDB...")
 				_ = store.Close()
 				_ = mycelium.Close()
 				database.Stop()
-				os.Exit(0)
+				memguard.SafeExit(0)
 			}
 		}()
 

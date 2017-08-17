@@ -7,17 +7,21 @@ import (
 
 	"gitlab.com/SporeDB/sporedb/myc/sec"
 
+	"github.com/awnumar/memguard"
 	"github.com/stretchr/testify/require"
 )
 
 var testKeyRingA, testKeyRingB sec.KeyRing
 
 func init() {
+	password, _ := memguard.NewFromBytes([]byte("password"), true)
+	defer password.Destroy()
+
 	a := sec.NewKeyRingEd25519()
-	_ = a.CreatePrivate("password")
+	_ = a.CreatePrivate(password)
 
 	b := sec.NewKeyRingEd25519()
-	_ = b.CreatePrivate("password")
+	_ = b.CreatePrivate(password)
 	pubB, _ := b.Export("")
 
 	_ = a.Import(pubB, "b", sec.TrustHIGH)

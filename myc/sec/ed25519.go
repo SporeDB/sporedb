@@ -10,6 +10,8 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/awnumar/memguard"
+
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -37,7 +39,7 @@ func (k *KeyEd25519) Info() (identity string, data []byte, trust TrustLevel) {
 type KeyRingEd25519 struct {
 	mutex         sync.RWMutex
 	keys          map[string]*KeyEd25519
-	secret        ed25519.PrivateKey
+	secret        *memguard.LockedBuffer
 	armoredSecret *pem.Block
 	stale         bool
 }
@@ -58,28 +60,51 @@ func NewKeyRingEd25519() *KeyRingEd25519 {
 
 // Locked returns wether the KeyRing is currently locked or not (private key in cleartext in memory).
 func (k *KeyRingEd25519) Locked() bool {
-	return len(k.secret) == 0
+	return k.secret == nil
+}
+
+// LockPrivate locks the KeyRing by removing any remaining clear private key data in memory.
+func (k *KeyRingEd25519) LockPrivate() (err error) {
+	if k.Locked() {
+		return // already locked
+	}
+
+	k.secret.Destroy()
+	k.secret = nil
+	return
 }
 
 // UnlockPrivate tries to decypher the private key block in memory.
-func (k *KeyRingEd25519) UnlockPrivate(password string) (err error) {
+func (k *KeyRingEd25519) UnlockPrivate(password *memguard.LockedBuffer) (err error) {
 	if !k.Locked() {
 		return // already unlocked
 	}
 
-	k.secret, err = x509.DecryptPEMBlock(k.armoredSecret, []byte(password))
+	var secret []byte
+	secret, err = x509.DecryptPEMBlock(k.armoredSecret, password.Buffer())
+	if err != nil {
+		return
+	}
+
+	k.secret, err = memguard.NewFromBytes(secret, true)
 	return
 }
 
 // CreatePrivate generates a new Ed25519 private key and its associated PEM-armored block.
-func (k *KeyRingEd25519) CreatePrivate(password string) (err error) {
-	k.keys[""].Public, k.secret, err = ed25519.GenerateKey(rand.Reader)
+func (k *KeyRingEd25519) CreatePrivate(password *memguard.LockedBuffer) (err error) {
+	var secret []byte
+	k.keys[""].Public, secret, err = ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return
+	}
+
+	k.secret, err = memguard.NewFromBytes(secret, true)
 	if err != nil {
 		return
 	}
 
 	// Generate private key PEM
-	k.armoredSecret, err = x509.EncryptPEMBlock(rand.Reader, pemPrivateType, k.secret, []byte(password), pemCipher)
+	k.armoredSecret, err = x509.EncryptPEMBlock(rand.Reader, pemPrivateType, k.secret.Buffer(), password.Buffer(), pemCipher)
 	return
 }
 
