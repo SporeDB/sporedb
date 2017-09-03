@@ -9,6 +9,7 @@ type Peer struct {
 	write   chan []byte
 	session protocol.Session
 	stopped bool
+	ready   bool
 }
 
 func (p *Peer) emitter() {

@@ -29,13 +29,19 @@ func (m *Mycelium) Broadcast(from *Peer, call *protocol.Call) (sent int) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
-	for _, p := range m.Peers {
-		if p == from { // Do not re-send to the peer that initially sent the message
+	permutations := m.random.Perm(len(m.Peers))
+
+	for _, i := range permutations {
+		p := m.Peers[i]
+		if p == from || !p.ready {
 			continue
 		}
 
 		p.write <- data
 		sent++
+		if sent == m.fanout {
+			break
+		}
 	}
 
 	return
