@@ -9,6 +9,7 @@ before_script:
 
 unit tests:
   stage: test
+  retry: 1
   script:
     - make test
 

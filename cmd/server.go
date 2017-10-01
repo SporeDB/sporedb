@@ -57,6 +57,7 @@ var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Run a SporeDB node",
 	Run: func(cmd *cobra.Command, args []string) {
+		check(cfgErr)
 		keyRing := getKeyRing()
 		check(keyRing.UnlockPrivate(getPassword()))
 
@@ -79,6 +80,7 @@ var serverCmd = &cobra.Command{
 
 		mycelium, _ := myc.NewMycelium(&myc.MyceliumConfig{
 			Listen: viper.GetString("mycelium.listen"),
+			Self:   viper.GetStringSlice("mycelium.self"),
 			Peers:  peers,
 			DB:     database,
 		})

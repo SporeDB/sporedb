@@ -3,6 +3,7 @@ package myc
 
 import (
 	"errors"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -17,18 +18,27 @@ import (
 // Mycelium is the structure used to represent the SporeDB network of nodes.
 type Mycelium struct {
 	Peers []*Peer
+	Nodes []protocol.Node
 	DB    *db.DB
 
-	transport      transport
-	mutex          sync.RWMutex
-	rContainer     requestsContainer
-	recoveries     map[string]*recovery
+	ticker        *time.Ticker
+	random        *rand.Rand
+	transport     transport
+	mutex         sync.RWMutex
+	rContainer    requestsContainer
+	selfAddresses map[string]bool
+	recoveries    map[string]*recovery
+	fullSyncPeer  string // identity of full sync peer, empty if no full sync required
+	listenAddr    string
+
+	connectivity   int
+	fanout         int
 	recoveryQuorum int
-	fullSyncPeer   string // identity of full sync peer, empty if no full sync required
 }
 
 // MyceliumConfig is the structure used to setup a new Mycelium.
 type MyceliumConfig struct {
+	Self           []string        // Self addresses, used to avoid self-connections
 	Listen         string          // Peer API of this mycelium, might be empty to disable listenning.
 	Peers          []protocol.Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
 	DB             *db.DB          // Related local database
@@ -40,13 +50,28 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 	// Allocate caches
 	rc, _ := lru.New(128)
 
+	// Copy node configuration
+	nodes := make([]protocol.Node, len(c.Peers))
+	copy(nodes, c.Peers)
+
 	// Build Mycelium
 	m := &Mycelium{
+		Nodes:          nodes,
 		DB:             c.DB,
+		ticker:         time.NewTicker(30 * time.Second),
+		random:         rand.New(rand.NewSource(time.Now().UnixNano())),
 		transport:      &transportTCP{},
 		rContainer:     requestsContainer{cache: rc},
 		recoveryQuorum: c.RecoveryQuorum,
+		selfAddresses:  map[string]bool{c.Listen: true},
 		recoveries:     make(map[string]*recovery),
+		listenAddr:     c.Listen,
+		connectivity:   10,
+		fanout:         10,
+	}
+
+	for _, addr := range c.Self {
+		m.selfAddresses[addr] = true
 	}
 
 	if m.recoveryQuorum <= 0 {
@@ -69,39 +94,38 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 		}()
 	}
 
-	// Connect to peers asynchronously
-	for _, n := range c.Peers {
-		go func(n protocol.Node) {
-			_ = m.Bind(&Peer{Node: n})
-		}(n)
-	}
-
-	// Start broadcaster asynchronously
+	go m.membershipConnecter()
+	go m.membershipBroadcaster()
 	go m.broadcaster()
 
 	return m, nil
 }
 
-// Bind binds the Mycelium to a new peer.
+// Bind binds the Mycelium to a specific peer.
 // It starts a listening routine for the node incoming messages.
-func (m *Mycelium) Bind(n *Peer) error {
+func (m *Mycelium) Bind(n protocol.Node) error {
+	p := &Peer{Node: n, write: make(chan []byte, 64)}
+
 	// Is already bound?
 	m.mutex.Lock()
-	for _, p := range m.Peers {
-		if n.Equals(p) {
+	for _, p2 := range m.Peers {
+		if p.Equals(p2) {
 			return nil
 		}
 	}
+	m.Peers = append(m.Peers, p)
 	m.mutex.Unlock()
 
-	n.session = protocol.NewECDHESession(m.DB.KeyRing, m.DB.Identity)
-	conn, err := m.transport.Bind(n.Address)
+	p.session = protocol.NewECDHESession(m.DB.KeyRing, m.DB.Identity)
+	conn, err := m.transport.Bind(p.Address, func() {
+		m.handlerDisconnect(p)
+	})
 	if err != nil {
 		return err
 	}
 
 	handshake := func() error {
-		hello, _ := n.session.Hello()
+		hello, _ := p.session.Hello()
 		c := &protocol.Call{
 			F: protocol.FnHELLO,
 			M: hello,
@@ -125,35 +149,39 @@ func (m *Mycelium) Bind(n *Peer) error {
 			return errors.New("invalid hello message")
 		}
 
-		err = n.session.Verify(h)
+		err = p.session.Verify(h)
 		if err != nil {
 			return err
 		}
 
-		n.Identity = h.Identity
+		p.Identity = h.Identity
+		if p.Identity == m.DB.Identity {
+			return errors.New("self identity")
+		}
+
 		zap.L().Info("Handshake",
 			zap.String("mode", "client"),
-			zap.String("address", n.Address),
-			zap.String("identity", n.Identity),
-			zap.Bool("trusted", n.session.IsTrusted()),
+			zap.String("address", p.Address),
+			zap.String("identity", p.Identity),
+			zap.Bool("trusted", p.session.IsTrusted()),
 		)
 
-		return n.session.Open(conn)
+		return p.session.Open(conn)
 	}
 
-	for handshake() != nil {
-		time.Sleep(2 * time.Second)
+	if err := handshake(); err != nil {
+		m.handlerDisconnect(p)
+		return nil
 	}
 
 	conn.SetHandshake(handshake)
 
-	n.write = make(chan []byte, 64)
-
 	m.mutex.Lock()
-	m.Peers = append(m.Peers, n)
+	m.refreshNodes(p.Node)
+	p.ready = true
 	m.mutex.Unlock()
 
-	go m.router(n)
+	go m.router(p)
 	return nil
 }
 
@@ -166,15 +194,16 @@ func (m *Mycelium) Close() error {
 		_ = p.Close()
 	}
 
+	m.ticker.Stop()
 	return m.transport.Close()
 }
 
 // handler is called for each new incoming connection,
 // and each client disconnection (incoming == nil).
 // It starts a new listening routine.
-func (m *Mycelium) handler(n *Peer, incoming conn) {
+func (m *Mycelium) handler(p *Peer, incoming conn) {
 	if incoming == nil {
-		m.handlerDisconnect(n)
+		m.handlerDisconnect(p)
 		return
 	}
 
@@ -191,15 +220,15 @@ func (m *Mycelium) handler(n *Peer, incoming conn) {
 		return
 	}
 
-	n.session = protocol.NewECDHESession(m.DB.KeyRing, m.DB.Identity)
-	if n.session.Verify(h) != nil {
+	p.session = protocol.NewECDHESession(m.DB.KeyRing, m.DB.Identity)
+	if p.session.Verify(h) != nil {
 		_ = incoming.Close()
 		return
 	}
 
-	n.Identity = h.Identity
+	p.Identity = h.Identity
 
-	c.M, _ = n.session.Hello()
+	c.M, _ = p.session.Hello()
 	d, _ := c.Pack()
 	_, err := incoming.Write(d)
 	if err != nil {
@@ -211,36 +240,38 @@ func (m *Mycelium) handler(n *Peer, incoming conn) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if n.session.Open(incoming) != nil {
+	if p.session.Open(incoming) != nil {
 		_ = incoming.Close()
 		return
 	}
 
-	for _, p := range m.Peers {
-		if n.Equals(p) {
+	for _, p2 := range m.Peers {
+		if p.Equals(p2) {
 			return
 		}
 	}
 
-	n.write = make(chan []byte, 64)
-	m.Peers = append(m.Peers, n)
-	go m.router(n)
+	p.ready = true
+	p.write = make(chan []byte, 64)
+	m.Peers = append(m.Peers, p)
+
+	go m.router(p)
 	zap.L().Info("Handshake",
 		zap.String("mode", "server"),
-		zap.String("address", n.Address),
-		zap.String("identity", n.Identity),
-		zap.Bool("trusted", n.session.IsTrusted()),
+		zap.String("address", p.Address),
+		zap.String("identity", p.Identity),
+		zap.Bool("trusted", p.session.IsTrusted()),
 	)
 }
 
-func (m *Mycelium) handlerDisconnect(n *Peer) {
+func (m *Mycelium) handlerDisconnect(p *Peer) {
 	m.mutex.Lock()
-	for i, p := range m.Peers {
-		if p == n {
+	for i, p2 := range m.Peers {
+		if p == p2 {
 			m.Peers = append(m.Peers[:i], m.Peers[i+1:]...)
 			break
 		}
 	}
 	m.mutex.Unlock()
-	_ = n.Close()
+	_ = p.Close()
 }
