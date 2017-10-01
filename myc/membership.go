@@ -80,7 +80,7 @@ func (m *Mycelium) membershipBroadcaster() {
 func (m *Mycelium) filterIncomingNodes(nodes *protocol.Nodes) []*protocol.Node {
 	var notConnected []*protocol.Node
 	for _, node := range nodes.Nodes {
-		if node.Address != "" && !peerConnected(m.Peers, *node) && node.Address != m.listenAddr {
+		if node.Address != "" && !peerConnected(m.Peers, *node) && !m.selfAddresses[node.Address] {
 			notConnected = append(notConnected, node)
 		}
 	}
@@ -100,27 +100,31 @@ func (m *Mycelium) handleNodes(p *Peer, nodes *protocol.Nodes) {
 
 	// Update nodes
 	for _, node := range notConnected {
-		var found bool
-		for i, storedNode := range m.Nodes {
-			if (node.Identity != "" && node.Identity == storedNode.Identity) ||
-				(node.Address == storedNode.Address) {
-				zap.L().Info("Updating node information",
-					zap.String("identity", node.Identity),
-					zap.String("address", node.Address),
-					zap.String("from", p.Identity),
-				)
-				m.Nodes[i] = *node
-				found = true
-			}
-		}
+		m.refreshNodes(*node)
+	}
+}
 
-		if !found {
-			zap.L().Info("Adding new node information",
+// refreshNodes refresh mycelium cold nodes list.
+// it must be executed within a mutex.
+func (m *Mycelium) refreshNodes(node protocol.Node) {
+	var found bool
+	for i, storedNode := range m.Nodes {
+		if (node.Identity != "" && node.Identity == storedNode.Identity) ||
+			(node.Address == storedNode.Address) {
+			zap.L().Info("Updating node information",
 				zap.String("identity", node.Identity),
 				zap.String("address", node.Address),
-				zap.String("from", p.Identity),
 			)
-			m.Nodes = append(m.Nodes, *node)
+			m.Nodes[i] = node
+			found = true
 		}
+	}
+
+	if !found {
+		zap.L().Info("Adding new node information",
+			zap.String("identity", node.Identity),
+			zap.String("address", node.Address),
+		)
+		m.Nodes = append(m.Nodes, node)
 	}
 }

@@ -80,6 +80,7 @@ var serverCmd = &cobra.Command{
 
 		mycelium, _ := myc.NewMycelium(&myc.MyceliumConfig{
 			Listen: viper.GetString("mycelium.listen"),
+			Self:   viper.GetStringSlice("mycelium.self"),
 			Peers:  peers,
 			DB:     database,
 		})

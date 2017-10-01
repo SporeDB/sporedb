@@ -21,14 +21,15 @@ type Mycelium struct {
 	Nodes []protocol.Node
 	DB    *db.DB
 
-	ticker       *time.Ticker
-	random       *rand.Rand
-	transport    transport
-	mutex        sync.RWMutex
-	rContainer   requestsContainer
-	recoveries   map[string]*recovery
-	fullSyncPeer string // identity of full sync peer, empty if no full sync required
-	listenAddr   string
+	ticker        *time.Ticker
+	random        *rand.Rand
+	transport     transport
+	mutex         sync.RWMutex
+	rContainer    requestsContainer
+	selfAddresses map[string]bool
+	recoveries    map[string]*recovery
+	fullSyncPeer  string // identity of full sync peer, empty if no full sync required
+	listenAddr    string
 
 	connectivity   int
 	fanout         int
@@ -37,6 +38,7 @@ type Mycelium struct {
 
 // MyceliumConfig is the structure used to setup a new Mycelium.
 type MyceliumConfig struct {
+	Self           []string        // Self addresses, used to avoid self-connections
 	Listen         string          // Peer API of this mycelium, might be empty to disable listenning.
 	Peers          []protocol.Node // Bootstrapping nodes. A connection will be attempted for each node of this slice.
 	DB             *db.DB          // Related local database
@@ -61,10 +63,15 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 		transport:      &transportTCP{},
 		rContainer:     requestsContainer{cache: rc},
 		recoveryQuorum: c.RecoveryQuorum,
+		selfAddresses:  map[string]bool{c.Listen: true},
 		recoveries:     make(map[string]*recovery),
 		listenAddr:     c.Listen,
 		connectivity:   10,
 		fanout:         10,
+	}
+
+	for _, addr := range c.Self {
+		m.selfAddresses[addr] = true
 	}
 
 	if m.recoveryQuorum <= 0 {
@@ -170,6 +177,7 @@ func (m *Mycelium) Bind(n protocol.Node) error {
 	conn.SetHandshake(handshake)
 
 	m.mutex.Lock()
+	m.refreshNodes(p.Node)
 	p.ready = true
 	m.mutex.Unlock()
 

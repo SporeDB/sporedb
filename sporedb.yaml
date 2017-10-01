@@ -8,6 +8,8 @@ db:
     - solo.json
 
 mycelium:
+  self:
+    - "my-external-domain.com:4210"
   listen: "localhost:4210"
   peers:
     # - "remote:4210"
