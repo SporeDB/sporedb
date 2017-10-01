@@ -57,6 +57,7 @@ var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Run a SporeDB node",
 	Run: func(cmd *cobra.Command, args []string) {
+		check(cfgErr)
 		keyRing := getKeyRing()
 		check(keyRing.UnlockPrivate(getPassword()))
 

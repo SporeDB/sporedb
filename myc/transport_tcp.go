@@ -15,10 +15,11 @@ type transportTCP struct {
 	listener *net.TCPListener
 }
 
-func (t *transportTCP) Bind(address string) (conn, error) {
+func (t *transportTCP) Bind(address string, unbindFn func()) (conn, error) {
 	c := &connTCP{
 		connChan: make(chan error),
 		errChan:  make(chan error),
+		unbindFn: unbindFn,
 	}
 
 	go c.connect(address)
@@ -79,7 +80,9 @@ type connTCP struct {
 	*net.TCPConn
 
 	handshake         func() error
+	unbindFn          func()
 	connChan, errChan chan error
+	closed            bool
 }
 
 func (c *connTCP) SetHandshake(f func() error) {
@@ -87,6 +90,11 @@ func (c *connTCP) SetHandshake(f func() error) {
 }
 
 func (c *connTCP) Close() error {
+	if c.closed {
+		return nil
+	}
+
+	c.closed = true
 	close(c.errChan)
 	close(c.connChan)
 	if c.TCPConn != nil {
@@ -104,6 +112,7 @@ func (c *connTCP) connect(address string) {
 	}
 
 	var conn net.Conn
+	var remainingAttemps = 3
 
 	for open := true; open; _, open = <-c.errChan {
 		for {
@@ -114,11 +123,21 @@ func (c *connTCP) connect(address string) {
 					zap.String("address", address),
 					zap.Error(err),
 				)
+
+				remainingAttemps--
+				if remainingAttemps == 0 {
+					c.connChan <- err
+					c.unbindFn()
+					return
+				}
+
 				time.Sleep(time.Second)
 			} else {
 				break
 			}
 		}
+
+		remainingAttemps = 10
 
 		c.TCPConn, _ = conn.(*net.TCPConn)
 		zap.L().Info("Connected",
@@ -148,7 +167,7 @@ func (c *connTCP) Read(b []byte) (int, error) {
 	} else {
 		n, err = c.TCPConn.Read(b)
 	}
-	if err != nil {
+	if err != nil && !c.closed {
 		c.errChan <- err
 		err = <-c.connChan
 	}
@@ -164,7 +183,7 @@ func (c *connTCP) Write(b []byte) (int, error) {
 	} else {
 		n, err = c.TCPConn.Write(b)
 	}
-	if err != nil {
+	if err != nil && !c.closed {
 		c.errChan <- err
 		err = <-c.connChan
 	}

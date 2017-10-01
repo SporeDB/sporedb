@@ -52,6 +52,7 @@ var keysInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create local keyring",
 	Run: func(cmd *cobra.Command, args []string) {
+		check(cfgErr)
 		// Generate new KeyRing
 		keyRing := sec.NewKeyRingEd25519()
 		check(keyRing.CreatePrivate(getPassword()))

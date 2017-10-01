@@ -9,7 +9,7 @@ import (
 type transport interface {
 	io.Closer
 
-	Bind(address string) (conn, error)
+	Bind(address string, unbindFn func()) (conn, error)
 	Listen(address string, hook hookFn) error
 }
 

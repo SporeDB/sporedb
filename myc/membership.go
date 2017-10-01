@@ -7,6 +7,16 @@ import (
 	"go.uber.org/zap"
 )
 
+func peerConnected(peers []*Peer, node protocol.Node) (connected bool) {
+	for _, p := range peers {
+		if p.Node.Equals(node) {
+			connected = true
+			break
+		}
+	}
+	return
+}
+
 // membershipConnecter ensures that the current node is bound to enough peers.
 // The list of available nodes shall be updated by connected peers using broadcast.
 func (m *Mycelium) membershipConnecter() {
@@ -19,15 +29,7 @@ func (m *Mycelium) membershipConnecter() {
 			for _, i := range permutations {
 				n := m.Nodes[i]
 
-				var connected bool
-				for _, p := range m.Peers {
-					if p.Node.Equals(n) {
-						connected = true
-						break
-					}
-				}
-
-				if !connected {
+				if !peerConnected(m.Peers, n) {
 					nodeToBind = n
 					break
 				}
@@ -72,5 +74,53 @@ func (m *Mycelium) membershipBroadcaster() {
 		}
 
 		m.mutex.RUnlock()
+	}
+}
+
+func (m *Mycelium) filterIncomingNodes(nodes *protocol.Nodes) []*protocol.Node {
+	var notConnected []*protocol.Node
+	for _, node := range nodes.Nodes {
+		if node.Address != "" && !peerConnected(m.Peers, *node) && node.Address != m.listenAddr {
+			notConnected = append(notConnected, node)
+		}
+	}
+	return notConnected
+}
+
+func (m *Mycelium) handleNodes(p *Peer, nodes *protocol.Nodes) {
+	if !p.session.IsTrusted() {
+		return
+	}
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// Filter out connected peers and bootstraping nodes
+	var notConnected = m.filterIncomingNodes(nodes)
+
+	// Update nodes
+	for _, node := range notConnected {
+		var found bool
+		for i, storedNode := range m.Nodes {
+			if (node.Identity != "" && node.Identity == storedNode.Identity) ||
+				(node.Address == storedNode.Address) {
+				zap.L().Info("Updating node information",
+					zap.String("identity", node.Identity),
+					zap.String("address", node.Address),
+					zap.String("from", p.Identity),
+				)
+				m.Nodes[i] = *node
+				found = true
+			}
+		}
+
+		if !found {
+			zap.L().Info("Adding new node information",
+				zap.String("identity", node.Identity),
+				zap.String("address", node.Address),
+				zap.String("from", p.Identity),
+			)
+			m.Nodes = append(m.Nodes, *node)
+		}
 	}
 }

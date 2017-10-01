@@ -56,7 +56,7 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 	m := &Mycelium{
 		Nodes:          nodes,
 		DB:             c.DB,
-		ticker:         time.NewTicker(10 * time.Second),
+		ticker:         time.NewTicker(30 * time.Second),
 		random:         rand.New(rand.NewSource(time.Now().UnixNano())),
 		transport:      &transportTCP{},
 		rContainer:     requestsContainer{cache: rc},
@@ -97,7 +97,7 @@ func NewMycelium(c *MyceliumConfig) (*Mycelium, error) {
 // Bind binds the Mycelium to a specific peer.
 // It starts a listening routine for the node incoming messages.
 func (m *Mycelium) Bind(n protocol.Node) error {
-	p := &Peer{Node: n}
+	p := &Peer{Node: n, write: make(chan []byte, 64)}
 
 	// Is already bound?
 	m.mutex.Lock()
@@ -110,7 +110,9 @@ func (m *Mycelium) Bind(n protocol.Node) error {
 	m.mutex.Unlock()
 
 	p.session = protocol.NewECDHESession(m.DB.KeyRing, m.DB.Identity)
-	conn, err := m.transport.Bind(p.Address)
+	conn, err := m.transport.Bind(p.Address, func() {
+		m.handlerDisconnect(p)
+	})
 	if err != nil {
 		return err
 	}
@@ -146,6 +148,10 @@ func (m *Mycelium) Bind(n protocol.Node) error {
 		}
 
 		p.Identity = h.Identity
+		if p.Identity == m.DB.Identity {
+			return errors.New("self identity")
+		}
+
 		zap.L().Info("Handshake",
 			zap.String("mode", "client"),
 			zap.String("address", p.Address),
@@ -156,13 +162,12 @@ func (m *Mycelium) Bind(n protocol.Node) error {
 		return p.session.Open(conn)
 	}
 
-	for handshake() != nil {
-		time.Sleep(2 * time.Second)
+	if err := handshake(); err != nil {
+		m.handlerDisconnect(p)
+		return nil
 	}
 
 	conn.SetHandshake(handshake)
-
-	p.write = make(chan []byte, 64)
 
 	m.mutex.Lock()
 	p.ready = true

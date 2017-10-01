@@ -29,6 +29,7 @@ var policyCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new policy",
 	Run: func(cmd *cobra.Command, args []string) {
+		check(cfgErr)
 		keyRing := getKeyRing()
 		p := &db.Policy{}
 		p.Uuid = read("Name of the policy", uuid.NewV4().String())

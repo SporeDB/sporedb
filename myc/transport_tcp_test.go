@@ -34,7 +34,7 @@ func Test_transportTCP(t *testing.T) {
 		})
 	}()
 
-	c, err := cli.Bind(p)
+	c, err := cli.Bind(p, func() {})
 	require.Nil(t, err)
 	require.NotNil(t, c)
 

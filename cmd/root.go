@@ -9,6 +9,7 @@ import (
 )
 
 var cfgFile *string
+var cfgErr error
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -33,7 +34,10 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	var err = viper.ReadInConfig()
-	check(err)
+	if err != nil {
+		cfgErr = err
+	}
+
 	viper.AutomaticEnv() // read in environment variables that match
 
 	// Put default values

@@ -9,6 +9,7 @@ import (
 	"gitlab.com/SporeDB/sporedb/myc/protocol"
 )
 
+// nolint: gocyclo
 func (m *Mycelium) router(p *Peer) {
 	go p.emitter()
 	for !p.stopped {
@@ -42,6 +43,8 @@ func (m *Mycelium) router(p *Peer) {
 			go m.handleRaw(p, c.M.(*protocol.Raw))
 		case protocol.FnCATALOG:
 			go m.handleCatalog(p, c.M.(*db.Catalog))
+		case protocol.FnNODES:
+			go m.handleNodes(p, c.M.(*protocol.Nodes))
 		}
 	}
 }
